@@ -1,21 +1,56 @@
 /// <reference path="../typings/tsd.d.ts"/>
+//class Command<T> {
+//    private commandHandlers : Array< (cmd:T) => void > = [];
+//
+//    public handle(cmdHandler: (cmd:T) => void ) {
+//        this.commandHandlers.push(cmdHandler);
+//    }
+//
+//    public emit(cmd:T) {
+//        this.commandHandlers.forEach(handler => {
+//            handler(cmd);
+//        })
+//    }
+//}
 var Command = (function () {
     function Command() {
-        this.commandHandlers = [];
     }
-    Command.prototype.handle = function (cmdHandler) {
-        this.commandHandlers.push(cmdHandler);
+    Command.prototype.handle = function (eventHandler) {
+        this.eventHandler = eventHandler;
     };
 
-    Command.prototype.emit = function (cmd) {
-        this.commandHandlers.forEach(function (handler) {
-            handler(cmd);
-        });
+    Command.prototype.execute = function (params) {
+        return this.eventHandler(params);
     };
     return Command;
 })();
 
 var createActivityCommand = new Command();
+
+// Domain Events
+var DomainEvent = (function () {
+    function DomainEvent(command, businessLogic) {
+        var _this = this;
+        this.projectionHandlers = [];
+        command.handle(function (param) {
+            businessLogic(param);
+            _this.emit(param);
+        });
+    }
+    DomainEvent.prototype.handle = function (handler) {
+        this.projectionHandlers.push(handler);
+    };
+
+    DomainEvent.prototype.emit = function (event) {
+        this.projectionHandlers.forEach(function (handler) {
+            handler(event);
+        });
+    };
+    return DomainEvent;
+})();
+
+var activityCreatedEvent = new DomainEvent(createActivityCommand, function (params) {
+});
 
 var ActivityOwner = (function () {
     function ActivityOwner() {
@@ -27,7 +62,7 @@ var ActivityOwnerProjection = (function () {
     function ActivityOwnerProjection() {
         var _this = this;
         this.projection = [];
-        createActivityCommand.handle(function (a) {
+        activityCreatedEvent.handle(function (a) {
             var activityOwner = new ActivityOwner();
             activityOwner.name = a.name;
 
@@ -42,12 +77,14 @@ var ActivityOwnerProjection = (function () {
 })();
 
 // .. client
-createActivityCommand.emit({
+var myOwnerView = new ActivityOwnerProjection().projection;
+
+createActivityCommand.execute({
     name: "Nabada",
     owner: "Jonathan",
     events: ["Schwörrede", "Afterparty"]
 });
 
 // ..
-var myOwnerView = new ActivityOwnerProjection().projection;
+console.log(myOwnerView);
 //# sourceMappingURL=cqrs.js.map
