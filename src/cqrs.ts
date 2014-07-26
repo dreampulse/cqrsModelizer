@@ -1,21 +1,6 @@
 /// <reference path="../typings/tsd.d.ts"/>
 
 
-//class Command<T> {
-//    private commandHandlers : Array< (cmd:T) => void > = [];
-//
-//    public handle(cmdHandler: (cmd:T) => void ) {
-//        this.commandHandlers.push(cmdHandler);
-//    }
-//
-//    public emit(cmd:T) {
-//        this.commandHandlers.forEach(handler => {
-//            handler(cmd);
-//        })
-//    }
-//}
-
-
 class Command<T> {
     private eventHandler : (cmd:T) => void;
 
@@ -36,13 +21,32 @@ interface CreateActivity {
 
 var createActivityCommand = new Command<CreateActivity>();
 
+interface StoredEvent<T> {
+    name : string;
+    params : T;
+}
+
+class Store<T> {
+    private storage : StoredEvent<T>[] = [];
+
+    public save(event : StoredEvent<T>) {
+        this.storage.push(event);
+    }
+
+    public restore() {
+        return this.storage;
+    }
+}
 
 // Domain Events
 class DomainEvent<T> {
-    constructor(command : Command<T>, businessLogic : (param : T) => void) {
-        command.handle( (param : T) => {
-            businessLogic(param);
-            this.emit(param);
+    private eventStore : Store<T> = new Store<T>();
+
+    constructor(public name : string, command : Command<T>, businessLogic : (params : T) => void) {
+        command.handle( (params : T) => {
+            this.eventStore.save({name:name, params:params});
+            businessLogic(params);
+            this.emit(params);
         });
     }
 
@@ -50,6 +54,11 @@ class DomainEvent<T> {
 
     public handle(handler: (cmd:T) => void ) {
         this.projectionHandlers.push(handler);
+
+        // replay events
+        this.eventStore.restore().forEach( (event) => {
+            handler(event.params);
+        });
     }
 
     private emit(event:T) {
@@ -60,38 +69,63 @@ class DomainEvent<T> {
 }
 
 var activityCreatedEvent = new DomainEvent<CreateActivity>(
+    'activityCreatedEvent',
     createActivityCommand,
     (params) => { // business logic
 
     }
 );
 
-class ActivityOwner {
+
+class Projection<T> {
+    private projection : T[]  = [];
+
+    private viewers : Array< (projection : T[]) => void > = [];
+
+    constructor( projector : (projection : T[], notify: () => void ) => void ) {
+
+        var self = this;
+        var notify = function() {
+            self.viewers.forEach( (viewer) => {
+                viewer(this.projection);
+            })
+        };
+
+        projector(this.projection, notify);
+    }
+
+    public subscribe(subscriber: (projection : T[]) => void ) {
+        this.viewers.push(subscriber);
+        subscriber(this.projection);
+    }
+}
+
+interface ActivityOwner {
     name : string;
     owner : number;
 }
 
-class ActivityOwnerProjection {
-    projection : ActivityOwner[] = [];
-
-    constructor() {
+var activityOwnerProjection = new Projection<ActivityOwner>(
+    (projection, notify) => {
         activityCreatedEvent.handle( (a : CreateActivity) => {
-            var activityOwner = new ActivityOwner();
-            activityOwner.name = a.name;
 
+            // projection logic
+            var owner = 0;
             if (a.owner == 'Jonathan') {
-                activityOwner.owner = 1;
+                owner = 1;
             }
 
-            this.projection.push(activityOwner);
+            projection.push({
+                name : a.name,
+                owner: owner
+            });
+            notify();
         })
-    }
-}
+    });
+
 
 
 // .. client
-
-var myOwnerView = new ActivityOwnerProjection().projection;
 
 createActivityCommand.execute({
     name : "Nabada",
@@ -101,6 +135,7 @@ createActivityCommand.execute({
 
 // ..
 
+activityOwnerProjection.subscribe((view) => {
+    console.log(view);
+});
 
-
-console.log(myOwnerView);

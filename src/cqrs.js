@@ -1,17 +1,4 @@
 /// <reference path="../typings/tsd.d.ts"/>
-//class Command<T> {
-//    private commandHandlers : Array< (cmd:T) => void > = [];
-//
-//    public handle(cmdHandler: (cmd:T) => void ) {
-//        this.commandHandlers.push(cmdHandler);
-//    }
-//
-//    public emit(cmd:T) {
-//        this.commandHandlers.forEach(handler => {
-//            handler(cmd);
-//        })
-//    }
-//}
 var Command = (function () {
     function Command() {
     }
@@ -27,18 +14,40 @@ var Command = (function () {
 
 var createActivityCommand = new Command();
 
+var Store = (function () {
+    function Store() {
+        this.storage = [];
+    }
+    Store.prototype.save = function (event) {
+        this.storage.push(event);
+    };
+
+    Store.prototype.restore = function () {
+        return this.storage;
+    };
+    return Store;
+})();
+
 // Domain Events
 var DomainEvent = (function () {
-    function DomainEvent(command, businessLogic) {
+    function DomainEvent(name, command, businessLogic) {
         var _this = this;
+        this.name = name;
+        this.eventStore = new Store();
         this.projectionHandlers = [];
-        command.handle(function (param) {
-            businessLogic(param);
-            _this.emit(param);
+        command.handle(function (params) {
+            _this.eventStore.save({ name: name, params: params });
+            businessLogic(params);
+            _this.emit(params);
         });
     }
     DomainEvent.prototype.handle = function (handler) {
         this.projectionHandlers.push(handler);
+
+        // replay events
+        this.eventStore.restore().forEach(function (event) {
+            handler(event.params);
+        });
     };
 
     DomainEvent.prototype.emit = function (event) {
@@ -49,36 +58,47 @@ var DomainEvent = (function () {
     return DomainEvent;
 })();
 
-var activityCreatedEvent = new DomainEvent(createActivityCommand, function (params) {
+var activityCreatedEvent = new DomainEvent('activityCreatedEvent', createActivityCommand, function (params) {
 });
 
-var ActivityOwner = (function () {
-    function ActivityOwner() {
-    }
-    return ActivityOwner;
-})();
-
-var ActivityOwnerProjection = (function () {
-    function ActivityOwnerProjection() {
-        var _this = this;
+var Projection = (function () {
+    function Projection(projector) {
         this.projection = [];
-        activityCreatedEvent.handle(function (a) {
-            var activityOwner = new ActivityOwner();
-            activityOwner.name = a.name;
+        this.viewers = [];
+        var self = this;
+        var notify = function () {
+            var _this = this;
+            self.viewers.forEach(function (viewer) {
+                viewer(_this.projection);
+            });
+        };
 
-            if (a.owner == 'Jonathan') {
-                activityOwner.owner = 1;
-            }
-
-            _this.projection.push(activityOwner);
-        });
+        projector(this.projection, notify);
     }
-    return ActivityOwnerProjection;
+    Projection.prototype.subscribe = function (subscriber) {
+        this.viewers.push(subscriber);
+        subscriber(this.projection);
+    };
+    return Projection;
 })();
+
+var activityOwnerProjection = new Projection(function (projection, notify) {
+    activityCreatedEvent.handle(function (a) {
+        // projection logic
+        var owner = 0;
+        if (a.owner == 'Jonathan') {
+            owner = 1;
+        }
+
+        projection.push({
+            name: a.name,
+            owner: owner
+        });
+        notify();
+    });
+});
 
 // .. client
-var myOwnerView = new ActivityOwnerProjection().projection;
-
 createActivityCommand.execute({
     name: "Nabada",
     owner: "Jonathan",
@@ -86,5 +106,7 @@ createActivityCommand.execute({
 });
 
 // ..
-console.log(myOwnerView);
+activityOwnerProjection.subscribe(function (view) {
+    console.log(view);
+});
 //# sourceMappingURL=cqrs.js.map
