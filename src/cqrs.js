@@ -1,18 +1,15 @@
-/// <reference path="../typings/tsd.d.ts"/>
+var Q = require('q');
 var Command = (function () {
     function Command() {
     }
     Command.prototype.handle = function (eventHandler) {
         this.eventHandler = eventHandler;
     };
-
     Command.prototype.execute = function (params) {
-        return this.eventHandler(params);
+        this.eventHandler(params);
     };
     return Command;
 })();
-
-var createActivityCommand = new Command();
 
 var Store = (function () {
     function Store() {
@@ -20,36 +17,35 @@ var Store = (function () {
     }
     Store.prototype.save = function (event) {
         this.storage.push(event);
+        return Q(null);
     };
-
     Store.prototype.restore = function () {
-        return this.storage;
+        return Q(this.storage);
     };
     return Store;
 })();
-
-// Domain Events
 var DomainEvent = (function () {
     function DomainEvent(name, command, businessLogic) {
-        var _this = this;
         this.name = name;
+        var _this = this;
         this.eventStore = new Store();
         this.projectionHandlers = [];
         command.handle(function (params) {
-            _this.eventStore.save({ name: name, params: params });
-            businessLogic(params);
             _this.emit(params);
+            _this.eventStore.save({ name: name, params: params }).then(function () {
+                return businessLogic(params);
+            }).done();
         });
     }
     DomainEvent.prototype.handle = function (handler) {
-        this.projectionHandlers.push(handler);
-
-        // replay events
-        this.eventStore.restore().forEach(function (event) {
-            handler(event.params);
-        });
+        var _this = this;
+        this.eventStore.restore().then(function (events) {
+            events.forEach(function (event) {
+                handler(event.params);
+            });
+            _this.projectionHandlers.push(handler);
+        }).done();
     };
-
     DomainEvent.prototype.emit = function (event) {
         this.projectionHandlers.forEach(function (handler) {
             handler(event);
@@ -57,22 +53,16 @@ var DomainEvent = (function () {
     };
     return DomainEvent;
 })();
-
-var activityCreatedEvent = new DomainEvent('activityCreatedEvent', createActivityCommand, function (params) {
-});
-
 var Projection = (function () {
     function Projection(projector) {
         this.projection = [];
         this.viewers = [];
         var self = this;
         var notify = function () {
-            var _this = this;
             self.viewers.forEach(function (viewer) {
-                viewer(_this.projection);
+                viewer(self.projection);
             });
         };
-
         projector(this.projection, notify);
     }
     Projection.prototype.subscribe = function (subscriber) {
@@ -82,14 +72,18 @@ var Projection = (function () {
     return Projection;
 })();
 
+
+var createActivityCommand = new Command();
+var activityCreatedEvent = new DomainEvent('activityCreatedEvent', createActivityCommand, function (params) {
+    return Q(null);
+});
+
 var activityOwnerProjection = new Projection(function (projection, notify) {
     activityCreatedEvent.handle(function (a) {
-        // projection logic
         var owner = 0;
         if (a.owner == 'Jonathan') {
             owner = 1;
         }
-
         projection.push({
             name: a.name,
             owner: owner
@@ -97,15 +91,22 @@ var activityOwnerProjection = new Projection(function (projection, notify) {
         notify();
     });
 });
-
-// .. client
 createActivityCommand.execute({
     name: "Nabada",
     owner: "Jonathan",
-    events: ["Schwörrede", "Afterparty"]
+    events: [
+        {
+            name: "Schwörrede",
+            price: 0,
+            quantity: 10000
+        },
+        {
+            name: "After Party",
+            price: 7,
+            quantity: 1000
+        }
+    ]
 });
-
-// ..
 activityOwnerProjection.subscribe(function (view) {
     console.log(view);
 });
