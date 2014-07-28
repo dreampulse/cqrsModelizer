@@ -9,6 +9,7 @@
   "author": "Jonathan Häberle <jonathan.haeberle@gmail.com> (http://dreampulse.de/)",
   "license": "ISC",
   "dependencies": {
-    "q": "^1.0.1"
+    "q": "^1.0.1",
+    "mongodb": "^1.4.7"
   }
 }

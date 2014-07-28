@@ -2,6 +2,9 @@
 
 import Q = require('q');
 
+import mongodb = require('mongodb');
+
+Q.longStackSupport = true;
 
 ////////////////
 ///// Commands
@@ -21,28 +24,91 @@ class Command<T> {
 ////////////////////
 // Storage of Domain Events
 
-interface StoredEvent<T> {
+interface StoredEvent {
   name : string;
-  params : T;
+  params : any;
 }
 
-class Store<T> {
-  private storage:StoredEvent<T>[] = [];
+class LocalEventStore {
+  private storage:StoredEvent[] = [];
 
-  public save(event:StoredEvent<T>):Q.Promise<void> {
+  public save(event:StoredEvent):Q.Promise<void> {
     this.storage.push(event);
     return Q<void>(null);
   }
 
-  public restore():Q.Promise< StoredEvent<T>[] > {
-    return Q<StoredEvent<T>[]>(this.storage);
+  public restore() {
+    return Q<StoredEvent[]>(this.storage);
   }
 }
+
+
+class MongoEventStore {
+  private db : mongodb.Db;
+  private collection : mongodb.Collection;
+
+  public initPromise : Q.Promise<void>;
+
+  constructor(public uri : string) {
+
+    this.initPromise = Q.nfcall(mongodb.MongoClient.connect, this.uri)
+      .then((db:any) => {
+        this.db = db;
+        this.collection = db.collection('events');
+      });
+
+  }
+
+  public close() {
+    this.db.close();
+  }
+
+  public save(event:StoredEvent) {
+    var defer = Q.defer();
+
+    this.initPromise.then(() => {
+      this.collection.insert(event, function(err, doc) {
+        if (err) {
+          defer.reject(err);
+          return;
+        }
+        defer.resolve(doc);
+      });
+    });
+
+    return defer.promise;
+//    return Q.nfcall(this.collection.insert, event);  // warum geht das hier nicht?!
+  }
+
+  public restore() : Q.Promise<StoredEvent[]> {
+    var defer = Q.defer<StoredEvent[]>();
+
+    this.initPromise.then(() => {
+      this.collection.find().toArray(function (err, docs) {
+        if (err) {
+          defer.reject(err);
+          return;
+        }
+        defer.resolve(<StoredEvent[]>docs);
+      });
+    });
+
+    return defer.promise;
+
+//    return Q.nfcall(this.collection.find().each)
+//      .then((doc) => {
+//        return <StoredEvent>doc;
+//      })
+  }
+
+}
+
+var eventStore = new MongoEventStore('mongodb://127.0.0.1:27017/cqrs');
+
 ///////////////////////
 // Domain Events
 
 class DomainEvent<T> {
-  private eventStore:Store<T> = new Store<T>();
 
   constructor(public name:string, command:Command<T>, businessLogic:(params:T) => Q.Promise<void>) {
     // handle a command
@@ -51,7 +117,7 @@ class DomainEvent<T> {
       // Hinweis: reihenfolge ist wichtig - sonst kommen events doppel an..
       this.emit(params);                                  // den projections die sich für das Event interessiern benachrichtigen
 
-      this.eventStore.save({name: name, params: params})  // das Business Event speichern
+      eventStore.save({name: name, params: params})  // das Business Event speichern
         .then(() => {
           return businessLogic(params);                   // die Buiness Logic des DomainEvents ausführen
         })
@@ -64,16 +130,7 @@ class DomainEvent<T> {
 
   // eine Projektion meldet sich für dieses Event an
   public handle(handler:(cmd:T) => void) {
-
-    // replay events
-    this.eventStore.restore()
-      .then((events) => {
-        events.forEach((event) => {
-          handler(event.params);
-        });
-
-        this.projectionHandlers.push(handler);  // projection handler subscriben
-      }).done();
+    this.projectionHandlers.push(handler);  // projection handler subscriben
   }
 
   // den projections bescheid geben
@@ -81,6 +138,18 @@ class DomainEvent<T> {
     this.projectionHandlers.forEach(handler => {
       handler(event);
     })
+  }
+
+  public replay() {
+    // replay events
+    return eventStore.restore()
+      .then((events) => {
+        events.forEach((event) => {
+          if (event.name === this.name) {  // wenn das ein event von dem passenden typ ist
+            this.emit(<T>event.params);
+          }
+        });
+      });
   }
 }
 
@@ -122,6 +191,16 @@ interface CreateActivity {
   events : Event[];
 }
 
+
+
+interface ActivityOwner {
+  name : string;
+  owner : number;
+}
+
+
+// .. client
+
 var createActivityCommand = new Command<CreateActivity>();
 
 
@@ -134,12 +213,6 @@ var activityCreatedEvent = new DomainEvent<CreateActivity>(
   }
 );
 
-
-
-interface ActivityOwner {
-  name : string;
-  owner : number;
-}
 
 var activityOwnerProjection = new Projection<ActivityOwner>(
   (projection, notify) => {
@@ -160,7 +233,6 @@ var activityOwnerProjection = new Projection<ActivityOwner>(
   });
 
 
-// .. client
 
 createActivityCommand.execute({
   name: "Nabada",
@@ -184,3 +256,32 @@ createActivityCommand.execute({
 activityOwnerProjection.subscribe((view) => {
   console.log(view);
 });
+
+
+activityCreatedEvent.replay()
+.then(() => {
+    eventStore.close();
+  }).done();
+
+
+//var lo_db;
+//Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs')
+//  .then((db:any) => {
+//    lo_db = db;
+//  })
+//  .then(() => {
+//    var collection = lo_db.collection('test_insert');
+//    collection.insert({a:2}, function(err, docs) {
+//
+//    collection.count(function(err, count) {
+//      console.log("count", count);
+//    });
+//
+//    // Locate all the entries using find
+//    collection.find().toArray(function(err, results) {
+//      console.dir(results);
+//      // Let's close the db
+//      lo_db.close();
+//    });
+//  });
+//});
