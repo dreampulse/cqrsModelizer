@@ -15,15 +15,22 @@ var Command = (function () {
     };
 
     Command.prototype.execute = function (params) {
-        this.eventHandler(params);
+        return this.eventHandler(params);
     };
     return Command;
 })();
 
 
 var LocalEventStore = (function () {
-    function LocalEventStore() {
+    function LocalEventStore(events) {
+        var _this = this;
         this.storage = [];
+        this.domainEvents = {};
+        // save reference to domain Event
+        events.forEach(function (event) {
+            _this.domainEvents[event.name] = event;
+            event.store = _this;
+        });
     }
     LocalEventStore.prototype.save = function (event) {
         this.storage.push(event);
@@ -33,13 +40,34 @@ var LocalEventStore = (function () {
     LocalEventStore.prototype.restore = function () {
         return Q(this.storage);
     };
+
+    LocalEventStore.prototype.replay = function () {
+        var _this = this;
+        // replay events
+        return this.restore().then(function (events) {
+            events.forEach(function (event) {
+                // emitte das passende event
+                _this.domainEvents[event.name].emit(event.params);
+            });
+        });
+    };
+
+    LocalEventStore.prototype.close = function () {
+    };
     return LocalEventStore;
 })();
 
 var MongoEventStore = (function () {
-    function MongoEventStore(uri) {
+    function MongoEventStore(events, uri) {
         var _this = this;
         this.uri = uri;
+        this.domainEvents = {};
+        // save reference to domain Event
+        events.forEach(function (event) {
+            _this.domainEvents[event.name] = event;
+            event.store = _this;
+        });
+
         this.initPromise = Q.nfcall(mongodb.MongoClient.connect, this.uri).then(function (db) {
             _this.db = db;
             _this.collection = db.collection('events');
@@ -87,10 +115,19 @@ var MongoEventStore = (function () {
         //        return <StoredEvent>doc;
         //      })
     };
+
+    MongoEventStore.prototype.replay = function () {
+        var _this = this;
+        // replay events
+        return this.restore().then(function (events) {
+            events.forEach(function (event) {
+                // emitte das passende event
+                _this.domainEvents[event.name].emit(event.params);
+            });
+        });
+    };
     return MongoEventStore;
 })();
-
-var eventStore = new MongoEventStore('mongodb://127.0.0.1:27017/cqrs');
 
 ///////////////////////
 // Domain Events
@@ -104,9 +141,9 @@ var DomainEvent = (function () {
             // Hinweis: reihenfolge ist wichtig - sonst kommen events doppel an..
             _this.emit(params); // den projections die sich für das Event interessiern benachrichtigen
 
-            eventStore.save({ name: name, params: params }).then(function () {
+            return _this.store.save({ name: name, params: params }).then(function () {
                 return businessLogic(params);
-            }).done();
+            });
         });
     }
     // eine Projektion meldet sich für dieses Event an
@@ -118,18 +155,6 @@ var DomainEvent = (function () {
     DomainEvent.prototype.emit = function (event) {
         this.projectionHandlers.forEach(function (handler) {
             handler(event);
-        });
-    };
-
-    DomainEvent.prototype.replay = function () {
-        var _this = this;
-        // replay events
-        return eventStore.restore().then(function (events) {
-            events.forEach(function (event) {
-                if (event.name === _this.name) {
-                    _this.emit(event.params);
-                }
-            });
         });
     };
     return DomainEvent;
@@ -165,6 +190,9 @@ var activityCreatedEvent = new DomainEvent('activityCreatedEvent', createActivit
     return Q(null);
 });
 
+var eventStore = new MongoEventStore([activityCreatedEvent], 'mongodb://127.0.0.1:27017/cqrs');
+
+//var eventStore = new LocalEventStore([activityCreatedEvent]);
 var activityOwnerProjection = new Projection(function (projection, notify) {
     activityCreatedEvent.handle(function (a) {
         // projection logic
@@ -181,50 +209,31 @@ var activityOwnerProjection = new Projection(function (projection, notify) {
     });
 });
 
-createActivityCommand.execute({
-    name: "Nabada",
-    owner: "Jonathan",
-    events: [
-        {
-            name: "Schwörrede",
-            price: 0,
-            quantity: 10000
-        },
-        {
-            name: "After Party",
-            price: 7,
-            quantity: 1000
-        }
-    ]
-});
-
 // ..
 activityOwnerProjection.subscribe(function (view) {
     console.log(view);
 });
 
-activityCreatedEvent.replay().then(function () {
+eventStore.replay().then(function () {
+    return createActivityCommand.execute({
+        name: "Nabada",
+        owner: "Jonathan",
+        events: [
+            {
+                name: "Schwörrede",
+                price: 0,
+                quantity: 10000
+            },
+            {
+                name: "After Party",
+                price: 7,
+                quantity: 1000
+            }
+        ]
+    });
+}).then(function () {
+    console.log('current Projection', activityOwnerProjection.projection);
+}).then(function () {
     eventStore.close();
 }).done();
-//var lo_db;
-//Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs')
-//  .then((db:any) => {
-//    lo_db = db;
-//  })
-//  .then(() => {
-//    var collection = lo_db.collection('test_insert');
-//    collection.insert({a:2}, function(err, docs) {
-//
-//    collection.count(function(err, count) {
-//      console.log("count", count);
-//    });
-//
-//    // Locate all the entries using find
-//    collection.find().toArray(function(err, results) {
-//      console.dir(results);
-//      // Let's close the db
-//      lo_db.close();
-//    });
-//  });
-//});
 //# sourceMappingURL=cqrs.js.map

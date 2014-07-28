@@ -10,14 +10,14 @@ Q.longStackSupport = true;
 ///// Commands
 
 class Command<T> {
-  private eventHandler:(cmd:T) => void;
+  private eventHandler:(cmd:T) => Q.Promise<void>;
 
-  public handle(eventHandler:(cmd:T) => void) {
+  public handle(eventHandler:(cmd:T) => Q.Promise<void>) {
     this.eventHandler = eventHandler;
   }
 
-  public execute(params:T) {
-    this.eventHandler(params);
+  public execute(params:T) : Q.Promise<void> {
+    return this.eventHandler(params);
   }
 }
 
@@ -29,8 +29,27 @@ interface StoredEvent {
   params : any;
 }
 
-class LocalEventStore {
+interface EventStore {
+  save(event:StoredEvent) : Q.Promise<void>;
+  restore() : Q.Promise<StoredEvent[]>;
+  replay() : void;
+  close() : void;
+}
+
+class LocalEventStore implements EventStore {
   private storage:StoredEvent[] = [];
+
+  private domainEvents : { [name:string] : DomainEvent<any> } = {};
+
+  constructor(events : Array< DomainEvent<any> >) {
+
+    // save reference to domain Event
+    events.forEach((event) => {
+      this.domainEvents[event.name] = event;
+      event.store = this;
+    });
+
+  }
 
   public save(event:StoredEvent):Q.Promise<void> {
     this.storage.push(event);
@@ -40,16 +59,37 @@ class LocalEventStore {
   public restore() {
     return Q<StoredEvent[]>(this.storage);
   }
+
+  public replay() {
+    // replay events
+    return this.restore()
+      .then((events) => {
+        events.forEach((event) => {
+          // emitte das passende event
+          this.domainEvents[event.name].emit(event.params);
+        });
+      });
+  }
+
+
+  public close() { }
 }
 
 
-class MongoEventStore {
+class MongoEventStore implements EventStore {
   private db : mongodb.Db;
   private collection : mongodb.Collection;
+  private initPromise : Q.Promise<void>;
 
-  public initPromise : Q.Promise<void>;
+  private domainEvents : { [name:string] : DomainEvent<any> } = {};
 
-  constructor(public uri : string) {
+  constructor(events : Array< DomainEvent<any> >, private uri : string ) {
+
+    // save reference to domain Event
+    events.forEach((event) => {
+      this.domainEvents[event.name] = event;
+      event.store = this;
+    });
 
     this.initPromise = Q.nfcall(mongodb.MongoClient.connect, this.uri)
       .then((db:any) => {
@@ -63,8 +103,8 @@ class MongoEventStore {
     this.db.close();
   }
 
-  public save(event:StoredEvent) {
-    var defer = Q.defer();
+  public save(event:StoredEvent) : Q.Promise<void> {
+    var defer = Q.defer<void>();
 
     this.initPromise.then(() => {
       this.collection.insert(event, function(err, doc) {
@@ -101,28 +141,38 @@ class MongoEventStore {
 //      })
   }
 
+  public replay() {
+    // replay events
+    return this.restore()
+      .then((events) => {
+        events.forEach((event) => {
+          // emitte das passende event
+          this.domainEvents[event.name].emit(event.params);
+        });
+      });
+  }
+
 }
 
-var eventStore = new MongoEventStore('mongodb://127.0.0.1:27017/cqrs');
 
 ///////////////////////
 // Domain Events
 
 class DomainEvent<T> {
 
+  public store : EventStore;
+
   constructor(public name:string, command:Command<T>, businessLogic:(params:T) => Q.Promise<void>) {
     // handle a command
-    command.handle((params:T) => {
+    command.handle((params:T) : Q.Promise<void> => {
 
       // Hinweis: reihenfolge ist wichtig - sonst kommen events doppel an..
       this.emit(params);                                  // den projections die sich für das Event interessiern benachrichtigen
 
-      eventStore.save({name: name, params: params})  // das Business Event speichern
+      return this.store.save({name: name, params: params})  // das Business Event speichern
         .then(() => {
           return businessLogic(params);                   // die Buiness Logic des DomainEvents ausführen
         })
-        .done();
-
     });
   }
 
@@ -134,22 +184,10 @@ class DomainEvent<T> {
   }
 
   // den projections bescheid geben
-  private emit(event:T) {
+  public emit(event:T) {
     this.projectionHandlers.forEach(handler => {
       handler(event);
     })
-  }
-
-  public replay() {
-    // replay events
-    return eventStore.restore()
-      .then((events) => {
-        events.forEach((event) => {
-          if (event.name === this.name) {  // wenn das ein event von dem passenden typ ist
-            this.emit(<T>event.params);
-          }
-        });
-      });
   }
 }
 
@@ -157,7 +195,7 @@ class DomainEvent<T> {
 // Projections
 
 class Projection<T> {
-  private projection:T[] = [];
+  public projection:T[] = [];
 
   private viewers:Array< (projection:T[]) => void > = [];
 
@@ -213,6 +251,8 @@ var activityCreatedEvent = new DomainEvent<CreateActivity>(
   }
 );
 
+var eventStore = new MongoEventStore([activityCreatedEvent], 'mongodb://127.0.0.1:27017/cqrs');
+//var eventStore = new LocalEventStore([activityCreatedEvent]);
 
 var activityOwnerProjection = new Projection<ActivityOwner>(
   (projection, notify) => {
@@ -233,24 +273,6 @@ var activityOwnerProjection = new Projection<ActivityOwner>(
   });
 
 
-
-createActivityCommand.execute({
-  name: "Nabada",
-  owner: "Jonathan",
-  events: [
-    {
-      name: "Schwörrede",
-      price : 0,
-      quantity : 10000
-    },
-    {
-      name: "After Party",
-      price : 7,
-      quantity : 1000
-    }
-  ]
-});
-
 // ..
 
 activityOwnerProjection.subscribe((view) => {
@@ -258,30 +280,30 @@ activityOwnerProjection.subscribe((view) => {
 });
 
 
-activityCreatedEvent.replay()
-.then(() => {
+eventStore.replay()
+  .then(() => {
+
+    return createActivityCommand.execute({
+      name: "Nabada",
+      owner: "Jonathan",
+      events: [
+        {
+          name: "Schwörrede",
+          price : 0,
+          quantity : 10000
+        },
+        {
+          name: "After Party",
+          price : 7,
+          quantity : 1000
+        }
+      ]
+    });
+
+  })
+  .then(() => {
+    console.log('current Projection', activityOwnerProjection.projection);
+  })
+  .then(() => {
     eventStore.close();
   }).done();
-
-
-//var lo_db;
-//Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs')
-//  .then((db:any) => {
-//    lo_db = db;
-//  })
-//  .then(() => {
-//    var collection = lo_db.collection('test_insert');
-//    collection.insert({a:2}, function(err, docs) {
-//
-//    collection.count(function(err, count) {
-//      console.log("count", count);
-//    });
-//
-//    // Locate all the entries using find
-//    collection.find().toArray(function(err, results) {
-//      console.dir(results);
-//      // Let's close the db
-//      lo_db.close();
-//    });
-//  });
-//});
