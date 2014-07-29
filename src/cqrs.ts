@@ -26,6 +26,7 @@ class Command<T> {
 
 interface StoredEvent {
   name : string;
+  eventCounter : number;
   params : any;
 }
 
@@ -34,12 +35,16 @@ interface EventStore {
   restore() : Q.Promise<StoredEvent[]>;
   replay() : void;
   close() : void;
+
+  eventCounter : number;
 }
 
 class LocalEventStore implements EventStore {
   private storage:StoredEvent[] = [];
 
   private domainEvents : { [name:string] : DomainEvent<any> } = {};
+
+  public eventCounter : number;
 
   constructor(events : Array< DomainEvent<any> >) {
 
@@ -83,6 +88,8 @@ class MongoEventStore implements EventStore {
 
   private domainEvents : { [name:string] : DomainEvent<any> } = {};
 
+  public eventCounter : number = 0;
+
   constructor(events : Array< DomainEvent<any> >, private uri : string ) {
 
     // save reference to domain Event
@@ -95,7 +102,8 @@ class MongoEventStore implements EventStore {
       .then((db:any) => {
         this.db = db;
         this.collection = db.collection('events');
-      });
+      })
+      // todo eventCounter aus db hohlen
 
   }
 
@@ -106,39 +114,21 @@ class MongoEventStore implements EventStore {
   public save(event:StoredEvent) : Q.Promise<void> {
     var defer = Q.defer<void>();
 
-    this.initPromise.then(() => {
-      this.collection.insert(event, function(err, doc) {
-        if (err) {
-          defer.reject(err);
-          return;
-        }
-        defer.resolve(doc);
+    event.eventCounter = this.eventCounter;
+    this.eventCounter++;
+
+    return this.initPromise.then(() => {
+      return Q.ninvoke(this.collection, 'insert', event).then(() => {
       });
     });
-
-    return defer.promise;
-//    return Q.nfcall(this.collection.insert, event);  // warum geht das hier nicht?!
   }
 
   public restore() : Q.Promise<StoredEvent[]> {
-    var defer = Q.defer<StoredEvent[]>();
-
-    this.initPromise.then(() => {
-      this.collection.find().toArray(function (err, docs) {
-        if (err) {
-          defer.reject(err);
-          return;
-        }
-        defer.resolve(<StoredEvent[]>docs);
-      });
-    });
-
-    return defer.promise;
-
-//    return Q.nfcall(this.collection.find().each)
-//      .then((doc) => {
-//        return <StoredEvent>doc;
-//      })
+    return this.initPromise.then(() => {
+      return Q.ninvoke(this.collection.find(), 'toArray').then((docs) => {
+          return <StoredEvent[]>docs;
+        })
+    })
   }
 
   public replay() {
@@ -169,7 +159,7 @@ class DomainEvent<T> {
       // Hinweis: reihenfolge ist wichtig - sonst kommen events doppel an..
       this.emit(params);                                  // den projections die sich für das Event interessiern benachrichtigen
 
-      return this.store.save({name: name, params: params})  // das Business Event speichern
+      return this.store.save({name: name, params: params, eventCounter : -1})  // das Business Event speichern
         .then(() => {
           return businessLogic(params);                   // die Buiness Logic des DomainEvents ausführen
         })

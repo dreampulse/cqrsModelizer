@@ -62,6 +62,7 @@ var MongoEventStore = (function () {
         var _this = this;
         this.uri = uri;
         this.domainEvents = {};
+        this.eventCounter = 0;
         // save reference to domain Event
         events.forEach(function (event) {
             _this.domainEvents[event.name] = event;
@@ -72,6 +73,7 @@ var MongoEventStore = (function () {
             _this.db = db;
             _this.collection = db.collection('events');
         });
+        // todo eventCounter aus db hohlen
     }
     MongoEventStore.prototype.close = function () {
         this.db.close();
@@ -81,39 +83,22 @@ var MongoEventStore = (function () {
         var _this = this;
         var defer = Q.defer();
 
-        this.initPromise.then(function () {
-            _this.collection.insert(event, function (err, doc) {
-                if (err) {
-                    defer.reject(err);
-                    return;
-                }
-                defer.resolve(doc);
+        event.eventCounter = this.eventCounter;
+        this.eventCounter++;
+
+        return this.initPromise.then(function () {
+            return Q.ninvoke(_this.collection, 'insert', event).then(function () {
             });
         });
-
-        return defer.promise;
-        //    return Q.nfcall(this.collection.insert, event);  // warum geht das hier nicht?!
     };
 
     MongoEventStore.prototype.restore = function () {
         var _this = this;
-        var defer = Q.defer();
-
-        this.initPromise.then(function () {
-            _this.collection.find().toArray(function (err, docs) {
-                if (err) {
-                    defer.reject(err);
-                    return;
-                }
-                defer.resolve(docs);
+        return this.initPromise.then(function () {
+            return Q.ninvoke(_this.collection.find(), 'toArray').then(function (docs) {
+                return docs;
             });
         });
-
-        return defer.promise;
-        //    return Q.nfcall(this.collection.find().each)
-        //      .then((doc) => {
-        //        return <StoredEvent>doc;
-        //      })
     };
 
     MongoEventStore.prototype.replay = function () {
@@ -141,7 +126,7 @@ var DomainEvent = (function () {
             // Hinweis: reihenfolge ist wichtig - sonst kommen events doppel an..
             _this.emit(params); // den projections die sich für das Event interessiern benachrichtigen
 
-            return _this.store.save({ name: name, params: params }).then(function () {
+            return _this.store.save({ name: name, params: params, eventCounter: -1 }).then(function () {
                 return businessLogic(params);
             });
         });
