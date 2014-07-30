@@ -72,8 +72,14 @@ var MongoEventStore = (function () {
         this.initPromise = Q.nfcall(mongodb.MongoClient.connect, this.uri).then(function (db) {
             _this.db = db;
             _this.collection = db.collection('events');
+
+            return Q.ninvoke(_this.collection, 'aggregate', [{ $group: { _id: 0, eventCounter: { $max: "$eventCounter" } } }]);
+        }).then(function (agregate) {
+            //set current event Counter position
+            if (agregate.length === 1) {
+                _this.eventCounter = agregate[0].eventCounter;
+            }
         });
-        // todo eventCounter aus db hohlen
     }
     MongoEventStore.prototype.close = function () {
         this.db.close();
@@ -81,10 +87,8 @@ var MongoEventStore = (function () {
 
     MongoEventStore.prototype.save = function (event) {
         var _this = this;
-        var defer = Q.defer();
-
+        this.eventCounter += 1;
         event.eventCounter = this.eventCounter;
-        this.eventCounter++;
 
         return this.initPromise.then(function () {
             return Q.ninvoke(_this.collection, 'insert', event).then(function () {
@@ -147,8 +151,8 @@ var DomainEvent = (function () {
 
 /////////////////////
 // Projections
-var Projection = (function () {
-    function Projection(projector) {
+var LocalProjection = (function () {
+    function LocalProjection(projector) {
         this.projection = [];
         this.viewers = [];
         var self = this;
@@ -160,11 +164,41 @@ var Projection = (function () {
 
         projector(this.projection, notify);
     }
-    Projection.prototype.subscribe = function (subscriber) {
+    LocalProjection.prototype.subscribe = function (subscriber) {
         this.viewers.push(subscriber);
         subscriber(this.projection); // nach dem subscribe direkt die aktuelle projection zurück geben
     };
-    return Projection;
+    return LocalProjection;
+})();
+
+var MongoProjection = (function () {
+    function MongoProjection(name, uri, eventStore, projector) {
+        var _this = this;
+        this.name = name;
+        this.uri = uri;
+        this.eventStore = eventStore;
+        this.initPromise = Q.nfcall(mongodb.MongoClient.connect, this.uri).then(function (db) {
+            _this.db = db;
+            _this.collection = db.collection(name);
+
+            var self = _this;
+            var collection = function (mongoCmd, parm) {
+                return Q.ninvoke(self.collection, mongoCmd, parm);
+            };
+
+            projector(collection);
+        });
+    }
+    MongoProjection.prototype.query = function (params) {
+        return Q.ninvoke(this.collection.find(params), 'toArray').then(function (docs) {
+            return docs;
+        });
+    };
+
+    MongoProjection.prototype.close = function () {
+        this.db.close();
+    };
+    return MongoProjection;
 })();
 
 // .. client
@@ -178,7 +212,7 @@ var activityCreatedEvent = new DomainEvent('activityCreatedEvent', createActivit
 var eventStore = new MongoEventStore([activityCreatedEvent], 'mongodb://127.0.0.1:27017/cqrs');
 
 //var eventStore = new LocalEventStore([activityCreatedEvent]);
-var activityOwnerProjection = new Projection(function (projection, notify) {
+var activityMongoProjection = new MongoProjection('activityMongoProjection', 'mongodb://127.0.0.1:27017/cqrs', eventStore, function (collection) {
     activityCreatedEvent.handle(function (a) {
         // projection logic
         var owner = 0;
@@ -186,19 +220,17 @@ var activityOwnerProjection = new Projection(function (projection, notify) {
             owner = 1;
         }
 
-        projection.push({
+        collection('insert', {
             name: a.name,
             owner: owner
         });
-        notify();
     });
 });
 
 // ..
-activityOwnerProjection.subscribe(function (view) {
-    console.log(view);
-});
-
+//activityOwnerProjection.subscribe((view) => {
+//  console.log(view);
+//});
 eventStore.replay().then(function () {
     return createActivityCommand.execute({
         name: "Nabada",
@@ -217,8 +249,12 @@ eventStore.replay().then(function () {
         ]
     });
 }).then(function () {
-    console.log('current Projection', activityOwnerProjection.projection);
+    return activityMongoProjection.query({});
+    //console.log('current Projection', activityOwnerProjection.projection);
+}).then(function (activityOwner) {
+    console.log('current Mongo Projection', activityOwner);
 }).then(function () {
     eventStore.close();
+    activityMongoProjection.close();
 }).done();
 //# sourceMappingURL=cqrs.js.map

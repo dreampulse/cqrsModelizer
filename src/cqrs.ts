@@ -32,13 +32,13 @@ interface StoredEvent {
 
 interface EventStore {
   save(event:StoredEvent) : Q.Promise<void>;
-  restore() : Q.Promise<StoredEvent[]>;
+  restore(from : number) : Q.Promise<StoredEvent[]>;
   replay() : void;
-  close() : void;
 
   eventCounter : number;
 }
 
+/*
 class LocalEventStore implements EventStore {
   private storage:StoredEvent[] = [];
 
@@ -76,13 +76,11 @@ class LocalEventStore implements EventStore {
       });
   }
 
-
-  public close() { }
 }
+*/
 
 
 class MongoEventStore implements EventStore {
-  private db : mongodb.Db;
   private collection : mongodb.Collection;
   private initPromise : Q.Promise<void>;
 
@@ -90,7 +88,9 @@ class MongoEventStore implements EventStore {
 
   public eventCounter : number = 0;
 
-  constructor(events : Array< DomainEvent<any> >, private uri : string ) {
+  constructor(events : Array< DomainEvent<any> >, db : mongodb.Db) {
+
+    this.collection = db.collection('events');
 
     // save reference to domain Event
     events.forEach((event) => {
@@ -98,24 +98,19 @@ class MongoEventStore implements EventStore {
       event.store = this;
     });
 
-    this.initPromise = Q.nfcall(mongodb.MongoClient.connect, this.uri)
-      .then((db:any) => {
-        this.db = db;
-        this.collection = db.collection('events');
-      })
-      // todo eventCounter aus db hohlen
-
-  }
-
-  public close() {
-    this.db.close();
+   this.initPromise = Q.ninvoke(this.collection, 'aggregate', [ { $group: { _id:0, eventCounter: { $max: "$eventCounter"} } } ])
+      .then((agregate : any) => {
+        //set current event Counter position
+        if (agregate.length === 1) {
+          this.eventCounter = agregate[0].eventCounter;
+        }
+      });
   }
 
   public save(event:StoredEvent) : Q.Promise<void> {
-    var defer = Q.defer<void>();
 
+    this.eventCounter += 1;
     event.eventCounter = this.eventCounter;
-    this.eventCounter++;
 
     return this.initPromise.then(() => {
       return Q.ninvoke(this.collection, 'insert', event).then(() => {
@@ -179,12 +174,14 @@ class DomainEvent<T> {
       handler(event);
     })
   }
+
 }
 
 /////////////////////
 // Projections
 
-class Projection<T> {
+/*
+class LocalProjection<T> {
   public projection:T[] = [];
 
   private viewers:Array< (projection:T[]) => void > = [];
@@ -206,6 +203,34 @@ class Projection<T> {
     subscriber(this.projection);  // nach dem subscribe direkt die aktuelle projection zurück geben
   }
 }
+*/
+
+
+class MongoProjection<T> {
+  private collection : mongodb.Collection;
+
+  constructor(public name : string, db : mongodb.Db, private eventStore : EventStore , projector:(collection : (mongoCmd : string, parm : any) => Q.Promise<void> ) => void) {
+
+    this.collection = db.collection(name);
+
+    var self = this;
+    var collection = function(mongoCmd : string, parm : any) {
+      return Q.ninvoke<void>(self.collection, mongoCmd, parm);  // invoke mongodb command
+    };
+
+    projector(collection);
+
+  }
+
+  public query(params : any) : Q.Promise<T[]> {
+    return Q.ninvoke(this.collection.find(params), 'toArray').then((docs) => {
+      return <T[]>docs;
+    })
+  }
+
+}
+
+
 
 interface Event {
   name : string;
@@ -227,51 +252,54 @@ interface ActivityOwner {
 }
 
 
-// .. client
+//activityOwnerProjection.subscribe((view) => {
+//  console.log(view);
+//});
 
-var createActivityCommand = new Command<CreateActivity>();
+
+Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs')
+  .then((db : mongodb.Db) => {
 
 
-var activityCreatedEvent = new DomainEvent<CreateActivity>(
-  'activityCreatedEvent',
-  createActivityCommand,
-  (params) => {
-    // business logic
-    return Q<void>(null);
-  }
-);
+    var createActivityCommand = new Command<CreateActivity>();
 
-var eventStore = new MongoEventStore([activityCreatedEvent], 'mongodb://127.0.0.1:27017/cqrs');
-//var eventStore = new LocalEventStore([activityCreatedEvent]);
-
-var activityOwnerProjection = new Projection<ActivityOwner>(
-  (projection, notify) => {
-    activityCreatedEvent.handle((a:CreateActivity) => {
-
-      // projection logic
-      var owner = 0;
-      if (a.owner == 'Jonathan') {
-        owner = 1;
+    var activityCreatedEvent = new DomainEvent<CreateActivity>(
+      'activityCreatedEvent',
+      createActivityCommand,
+      (params) => {
+        // business logic
+        return Q<void>(null);
       }
+    );
 
-      projection.push({
-        name: a.name,
-        owner: owner
+    var eventStore = new MongoEventStore([activityCreatedEvent], db);
+    //var eventStore = new LocalEventStore([activityCreatedEvent]);
+
+
+
+    var activityMongoProjection = new MongoProjection<ActivityOwner>(
+      'activityMongoProjection',
+      db,
+      eventStore,
+      (collection) => {
+        activityCreatedEvent.handle((a:CreateActivity) => {
+
+          // projection logic
+          var owner = 0;
+          if (a.owner == 'Jonathan') {
+            owner = 1;
+          }
+
+          collection('insert', {
+            name: a.name,
+            owner: owner
+          });
+        })
       });
-      notify();
-    })
-  });
 
+    /////////////////////////
+    /// Example Actions
 
-// ..
-
-activityOwnerProjection.subscribe((view) => {
-  console.log(view);
-});
-
-
-eventStore.replay()
-  .then(() => {
 
     return createActivityCommand.execute({
       name: "Nabada",
@@ -292,8 +320,13 @@ eventStore.replay()
 
   })
   .then(() => {
-    console.log('current Projection', activityOwnerProjection.projection);
+    return activityMongoProjection.query({});
+    //console.log('current Projection', activityOwnerProjection.projection);
+  })
+  .then((activityOwner : ActivityOwner[]) => {
+    console.log('current Mongo Projection', activityOwner);
   })
   .then(() => {
     eventStore.close();
+    activityMongoProjection.close();
   }).done();
