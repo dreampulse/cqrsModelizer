@@ -2,12 +2,12 @@
   <library name="Generated files" type="javaScript">
     <properties>
       <sourceFilesUrls>
-        <item url="file://$PROJECT_DIR$/src/cqrsModelizer.js" />
+        <item url="file://$PROJECT_DIR$/example.js" />
         <item url="file://$PROJECT_DIR$/src/cqrs.js" />
       </sourceFilesUrls>
     </properties>
     <CLASSES>
-      <root url="file://$PROJECT_DIR$/src/cqrs.js" />
+      <root url="file://$PROJECT_DIR$/example.js" />
       <root url="file://$PROJECT_DIR$/src/cqrs.js" />
     </CLASSES>
     <SOURCES />

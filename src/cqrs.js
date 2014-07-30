@@ -1,5 +1,4 @@
 /// <reference path="../typings/tsd.d.ts"/>
-var mongodb = require('mongodb');
 var Q = require('q');
 Q.longStackSupport = true;
 
@@ -21,6 +20,7 @@ var Command = (function () {
     };
     return Command;
 })();
+exports.Command = Command;
 
 ///////////////////////
 // Domain Events
@@ -51,6 +51,7 @@ var DomainEvent = (function () {
     };
     return DomainEvent;
 })();
+exports.DomainEvent = DomainEvent;
 
 /////////////////////
 // Projections
@@ -73,41 +74,5 @@ var MongoProjection = (function () {
     };
     return MongoProjection;
 })();
-
-
-var createFooCmd = new Command('createFoo');
-
-/////////////////////
-// server
-var initServer = function (db) {
-    var domainEvents = {
-        fooCreated: new DomainEvent('fooCreated', createFooCmd, function (foo) {
-            // business logic
-        })
-    };
-
-    var projections = {
-        fooProjection: new MongoProjection('foo', db, function (proj, collection) {
-            domainEvents.fooCreated.handle(proj, function (foo) {
-                collection('insert', {
-                    bar: foo.bar
-                });
-            });
-        })
-    };
-};
-
-// running
-Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(function (db) {
-    initServer(db);
-
-    // do stuff
-    createFooCmd.execute({
-        bar: 'juhuu'
-    });
-
-    return db;
-}).then(function (db) {
-    db.close();
-}).done();
+exports.MongoProjection = MongoProjection;
 //# sourceMappingURL=cqrs.js.map
