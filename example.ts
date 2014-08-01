@@ -53,7 +53,7 @@ var initServer = function(db: mongodb.Db) {
   };
 
   var projections = {
-    fooProjection: new MongoProjection<SpecialOfferShoppingItems>('foo', db, (proj, collection) => {
+    SpecialOfferProjection: new MongoProjection<SpecialOfferShoppingItems>('SpecialOffers', db, (proj, collection) => {
 
       // handle thise events for projection:
       domainEvents.shoppingItemCreated.handle(proj, (item:Item) => {

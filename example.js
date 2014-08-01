@@ -26,7 +26,7 @@ var initServer = function (db) {
     };
 
     var projections = {
-        fooProjection: new MongoProjection('foo', db, function (proj, collection) {
+        SpecialOfferProjection: new MongoProjection('SpecialOffers', db, function (proj, collection) {
             // handle thise events for projection:
             domainEvents.shoppingItemCreated.handle(proj, function (item) {
                 // do projection
