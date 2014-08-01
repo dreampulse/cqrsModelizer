@@ -4,11 +4,13 @@
       <sourceFilesUrls>
         <item url="file://$PROJECT_DIR$/example.js" />
         <item url="file://$PROJECT_DIR$/src/cqrs.js" />
+        <item url="file://$PROJECT_DIR$/RESTexample.js" />
       </sourceFilesUrls>
     </properties>
     <CLASSES>
       <root url="file://$PROJECT_DIR$/example.js" />
       <root url="file://$PROJECT_DIR$/src/cqrs.js" />
+      <root url="file://$PROJECT_DIR$/RESTexample.js" />
     </CLASSES>
     <SOURCES />
   </library>
