@@ -85,13 +85,13 @@ export class Command<T> extends EventProvider<T> {
 export class MongoProjection<T> {
   private collection : mongodb.Collection;
 
-  constructor(public name : string, db : mongodb.Db, projector:(collection : (mongoCmd : string, parm : T) => Q.Promise<void> ) => void) {
+  constructor(public name : string, db : mongodb.Db, projector:(collection : (mongoCmd : string, ...parms : any[]) => Q.Promise<void> ) => void) {
 
     this.collection = db.collection(name);
 
     var self = this;
-    var collection = function(mongoCmd : string, parm : T) {
-      return Q.ninvoke<void>(self.collection, mongoCmd, parm);  // invoke mongodb command
+    var collection = function(mongoCmd : string, ...parms : any[]) {
+      return Q.npost<void>(self.collection, mongoCmd, parms);  // invoke mongodb command
     };
 
     projector(collection);
@@ -105,3 +105,21 @@ export class MongoProjection<T> {
   }
 
 }
+
+
+
+/////////////////////////////
+// Context
+
+export class Context {
+  constructor(public name : string, public db : mongodb.Db) {}
+
+  createCommand<T>(cmdName : string) : StoredEventProvider<T> {
+    return new StoredEventProvider<T>(cmdName, this.name + 'Events', this.db);
+  }
+
+  createDomainEvent<T>(name:string, eventProvider:EventProvider<T>, handlingLogic:(params:T) => void) : EventHandler<T> {
+    return new EventHandler<T>(name, eventProvider, handlingLogic);
+  }
+}
+
