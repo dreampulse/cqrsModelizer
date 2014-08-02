@@ -7,7 +7,8 @@ Q.longStackSupport = true;
 
 var cqrs = require('./src/cqrs2');
 var Command = cqrs.Command;
-var DomainEvent = cqrs.DomainEvent;
+var EventProvider = cqrs.EventProvider;
+var EventHandler = cqrs.EventHandler;
 var MongoProjection = cqrs.MongoProjection;
 
 
@@ -16,11 +17,11 @@ var MongoProjection = cqrs.MongoProjection;
 // server
 var initServer = function (db) {
     var commands = {
-        createShoppingItem: new Command('createShoppingItem')
+        createShoppingItem: new EventProvider('createShoppingItem')
     };
 
     var domainEvents = {
-        shoppingItemCreated: new DomainEvent('shoppingItemCreated', commands.createShoppingItem, function (item) {
+        shoppingItemCreated: new EventHandler('shoppingItemCreated', commands.createShoppingItem, function (item) {
             // business logic
         })
     };

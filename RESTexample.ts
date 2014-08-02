@@ -9,7 +9,8 @@ Q.longStackSupport = true;
 
 import cqrs = require('./src/cqrs2');
 var Command = cqrs.Command;
-var DomainEvent = cqrs.DomainEvent;
+var EventProvider = cqrs.EventProvider;
+var EventHandler = cqrs.EventHandler;
 var MongoProjection = cqrs.MongoProjection;
 
 
@@ -40,12 +41,12 @@ interface SpecialOfferShoppingItem {
 var initServer = function (db:mongodb.Db) {
 
   var commands = {
-    createShoppingItem: new Command<Item>('createShoppingItem')
+    createShoppingItem: new EventProvider<Item>('createShoppingItem')
   };
 
 
   var domainEvents = {
-    shoppingItemCreated: new DomainEvent<Item>('shoppingItemCreated', commands.createShoppingItem, (item) => {
+    shoppingItemCreated: new EventHandler<Item>('shoppingItemCreated', commands.createShoppingItem, (item) => {
       // business logic
 
     })

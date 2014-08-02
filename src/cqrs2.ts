@@ -26,6 +26,29 @@ export class EventProvider<T> {
 }
 
 
+///////////////////////
+// Event Handler
+
+// Handelt Events (HanldingLogic) und löst neue Events aus
+export class EventHandler<T> extends EventProvider<T> {
+
+  constructor(name:string, eventProvider:EventProvider<T>, handlingLogic:(params:T) => void) {
+    super(name);
+
+    // als handler für ein command registieren
+    eventProvider.handle((params:T) => {
+      // was passieren soll, wenn ein commando ausgelöst wurde
+
+      handlingLogic(params);  // die Business Logik für das Event ausführen
+      this.emit(params); // das Event an die projections senden, die sich für das Event interessiern
+
+    });
+  }
+
+}
+
+
+
 ////////////////
 ///// Commands
 
@@ -34,29 +57,6 @@ export class Command<T> extends EventProvider<T> {
 
   constructor(name:string) {
     super(name);
-  }
-
-}
-
-
-
-///////////////////////
-// Domain Events
-
-// Ein Domain Event das bei einem best. Command ausgelöst wird
-export class DomainEvent<T> extends EventProvider<T> {
-
-  constructor(name:string, command:Command<T>, businessLogic:(params:T) => void) {
-    super(name);
-
-    // als handler für ein command registieren
-    command.handle((params:T) => {
-      // was passieren soll, wenn ein commando ausgelöst wurde
-
-      businessLogic(params);  // die Business Logik für das Event ausführen
-      this.emit(params); // das Event an die projections senden, die sich für das Event interessiern
-
-    });
   }
 
 }
