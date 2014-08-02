@@ -12,7 +12,7 @@ export class EventProvider<T> {
 
   constructor(public name : string) {}
 
-  private eventHandlers : { [name:string] : (event:T) => void } = {};
+  eventHandlers : { [name:string] : (event:T) => void } = {};
 
   public handle(eventHandler : (event:T) => void) {
     this.eventHandlers[this.name] = eventHandler;
@@ -37,16 +37,33 @@ export class EventHandler<T> extends EventProvider<T> {
 
     // als handler für ein command registieren
     eventProvider.handle((params:T) => {
-      // was passieren soll, wenn ein commando ausgelöst wurde
+      // was passieren soll, wenn das Event ausgelöst wurde
 
       handlingLogic(params);  // die Business Logik für das Event ausführen
-      this.emit(params); // das Event an die projections senden, die sich für das Event interessiern
+      this.emit(params); // das Event an die hanlder (z.B. Projections) senden, die sich für das Event interessiern
 
     });
   }
 
 }
 
+
+////////////////
+///// Event Store
+export class StoredEventProvider<T> extends EventProvider<T> {
+  private collection : mongodb.Collection;
+
+  constructor(name:string, collectionName : string, db : mongodb.Db) {
+    super(name);
+
+    this.collection = db.collection(collectionName);
+  }
+
+  public emit(event:T) {
+    Q.ninvoke<void>(this.collection, 'insert', event);  // save Event to db
+    super.emit(event);
+  }
+}
 
 
 ////////////////
@@ -68,7 +85,7 @@ export class Command<T> extends EventProvider<T> {
 export class MongoProjection<T> {
   private collection : mongodb.Collection;
 
-  constructor(public name : string, db : mongodb.Db, projector:(thisProjection : MongoProjection<T>, collection : (mongoCmd : string, parm : T) => Q.Promise<void> ) => void) {
+  constructor(public name : string, db : mongodb.Db, projector:(collection : (mongoCmd : string, parm : T) => Q.Promise<void> ) => void) {
 
     this.collection = db.collection(name);
 
@@ -77,7 +94,7 @@ export class MongoProjection<T> {
       return Q.ninvoke<void>(self.collection, mongoCmd, parm);  // invoke mongodb command
     };
 
-    projector(this, collection);
+    projector(collection);
 
   }
 

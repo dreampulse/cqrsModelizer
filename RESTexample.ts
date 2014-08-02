@@ -10,6 +10,7 @@ Q.longStackSupport = true;
 import cqrs = require('./src/cqrs2');
 var Command = cqrs.Command;
 var EventProvider = cqrs.EventProvider;
+var StoredEventProvider = cqrs.StoredEventProvider;
 var EventHandler = cqrs.EventHandler;
 var MongoProjection = cqrs.MongoProjection;
 
@@ -38,10 +39,11 @@ interface SpecialOfferShoppingItem {
 // server
 
 
+
 var initServer = function (db:mongodb.Db) {
 
   var commands = {
-    createShoppingItem: new EventProvider<Item>('createShoppingItem')
+    createShoppingItem: new StoredEventProvider<Item>('createShoppingItem', 'contextEvents', db)
   };
 
 
@@ -54,10 +56,10 @@ var initServer = function (db:mongodb.Db) {
   };
 
   var projections = {
-    specialOfferProjection: new MongoProjection<SpecialOfferShoppingItem>('SpecialOffers', db, (proj, collection) => {
+    specialOfferProjection: new MongoProjection<SpecialOfferShoppingItem>('SpecialOffers', db, (collection) => {
 
       // handle thise events for projection:
-      domainEvents.shoppingItemCreated.handle( (item:Item) => {
+      domainEvents.shoppingItemCreated.handle((item:Item) => {
         // do projection
 
         if (item.sale) {  // only if item is on sale
