@@ -5,7 +5,7 @@ var mongodb = require('mongodb');
 var Q = require('q');
 Q.longStackSupport = true;
 
-var cqrs = require('./src/cqrs');
+var cqrs = require('./src/cqrs2');
 var Command = cqrs.Command;
 var DomainEvent = cqrs.DomainEvent;
 var MongoProjection = cqrs.MongoProjection;
@@ -28,7 +28,7 @@ var initServer = function (db) {
     var projections = {
         specialOfferProjection: new MongoProjection('SpecialOffers', db, function (proj, collection) {
             // handle thise events for projection:
-            domainEvents.shoppingItemCreated.handle(proj, function (item) {
+            domainEvents.shoppingItemCreated.handle(function (item) {
                 // do projection
                 if (item.sale) {
                     collection('insert', {
@@ -62,13 +62,13 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(fun
     app.put('/createShoppingItem', function (req, res) {
         var params = req.body;
 
-        context.commands.createShoppingItem.execute({
+        context.commands.createShoppingItem.emit({
             name: params.name,
             price: params.price,
             sale: params.sale
         });
 
-        res.send(200, { status: 'ok' });
+        res.send({ status: 'ok' });
     });
 
     app.get('/specialOffers', function (req, res) {

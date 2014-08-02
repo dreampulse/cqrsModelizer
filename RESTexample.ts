@@ -7,7 +7,7 @@ import Q = require('q');
 Q.longStackSupport = true;
 
 
-import cqrs = require('./src/cqrs');
+import cqrs = require('./src/cqrs2');
 var Command = cqrs.Command;
 var DomainEvent = cqrs.DomainEvent;
 var MongoProjection = cqrs.MongoProjection;
@@ -30,6 +30,7 @@ interface SpecialOfferShoppingItem {
   name : string;
   price : number;
 }
+
 
 
 /////////////////////
@@ -55,7 +56,7 @@ var initServer = function (db:mongodb.Db) {
     specialOfferProjection: new MongoProjection<SpecialOfferShoppingItem>('SpecialOffers', db, (proj, collection) => {
 
       // handle thise events for projection:
-      domainEvents.shoppingItemCreated.handle(proj, (item:Item) => {
+      domainEvents.shoppingItemCreated.handle( (item:Item) => {
         // do projection
 
         if (item.sale) {  // only if item is on sale
@@ -78,6 +79,7 @@ var initServer = function (db:mongodb.Db) {
 };
 
 
+
 // running
 
 var app = express();
@@ -97,13 +99,13 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs')
     app.put('/createShoppingItem', (req: express.Request, res: express.Response) => {
       var params = req.body;
 
-      context.commands.createShoppingItem.execute({
+      context.commands.createShoppingItem.emit({
         name: params.name,
         price: params.price,
         sale: params.sale
       });
 
-      res.send(200, {status:'ok'});
+      res.send({status:'ok'});
     });
 
 
