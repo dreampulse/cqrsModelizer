@@ -68,6 +68,8 @@ exports.StoredEventProvider = StoredEventProvider;
 ////////////////
 ///// Commands
 // Ein Command mit Parametern T
+// Ist eine Implementierung für den Server
+// verwendet express (später soll das dynamisch ein communicator channel verwenden
 var Command = (function (_super) {
     __extends(Command, _super);
     function Command(name) {
@@ -76,6 +78,23 @@ var Command = (function (_super) {
     return Command;
 })(EventProvider);
 exports.Command = Command;
+
+// todo verhalten von der projection hier implementieren
+var Aggregate = (function (_super) {
+    __extends(Aggregate, _super);
+    function Aggregate(name, aggregator) {
+        _super.call(this, name);
+
+        var self = this;
+        var emit = function (params) {
+            self.emit(params);
+        };
+
+        aggregator(emit);
+    }
+    return Aggregate;
+})(EventProvider);
+exports.Aggregate = Aggregate;
 
 
 var MongoProjection = (function () {
@@ -115,14 +134,13 @@ var Context = (function () {
         this.name = name;
         this.db = db;
     }
-    Context.prototype.createCommand = function (cmdName) {
-        return new StoredEventProvider(cmdName, this.name + 'Events', this.db);
-    };
-
+    //  createCommand<T>(cmdName : string) : StoredEventProvider<T> {
+    //    return new StoredEventProvider<T>(cmdName, this.name + 'Events', this.db);
+    //  }
     Context.prototype.createDomainEvent = function (name, eventProvider, handlingLogic) {
         return new EventHandler(name, eventProvider, handlingLogic);
     };
     return Context;
 })();
 exports.Context = Context;
-//# sourceMappingURL=cqrs2.js.map
+//# sourceMappingURL=cqrs3.js.map

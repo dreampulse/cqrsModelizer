@@ -5,7 +5,7 @@ var mongodb = require('mongodb');
 var Q = require('q');
 Q.longStackSupport = true;
 
-var cqrs = require('./src/cqrs2');
+var cqrs = require('./src/cqrs3');
 var Command = cqrs.Command;
 var EventProvider = cqrs.EventProvider;
 var StoredEventProvider = cqrs.StoredEventProvider;
@@ -21,37 +21,84 @@ var initServer = function (db) {
     var appContext = new Context('appContext', db);
 
     var commands = {
-        createActivity: appContext.createCommand('createActivity'),
+        createActivity: new StoredEventProvider('createActivity', 'appContext', db),
         updateActivity: appContext.createCommand('updateActivity'),
-        deleteActivity: appContext.createCommand('deleteActivity')
+        deleteActivity: appContext.createCommand('deleteActivity'),
+        createUser: appContext.createCommand('createUser'),
+        updateUser: appContext.createCommand('updateUser'),
+        deleteUser: appContext.createCommand('deleteUser')
     };
 
     var domainEvents = {
         activityCreated: new EventHandler('activityCreated', commands.createActivity, function (activity) {
             // business logic
         }),
-        activityUpdated: new EventHandler('activityUpdated', commands.updateActivity, function (activity) {
+        activityUpdated: new EventHandler('activityUpdated', commands.updateActivity, function (update) {
             // business logic
         }),
         activityDeleted: new EventHandler('activityDeleted', commands.deleteActivity, function (id) {
+            // business logic
+        }),
+        userCreated: new EventHandler('userCreated', commands.createUser, function (user) {
+            // business logic
+        }),
+        userUpdated: new EventHandler('userUpdated', commands.updateUser, function (update) {
+            // business logic
+        }),
+        userDeleted: new EventHandler('userDeleted', commands.deleteUser, function (id) {
             // business logic
         })
     };
 
     // das hier ist quasi ein Aggregartor
     var projections = {
-        allActivitiesProjection: new MongoProjection('allActivities', db, function (collection) {
+        activitiesProjection: new MongoProjection('activities', db, function (collection) {
             // handle thise events for projection:
             domainEvents.activityCreated.handle(function (activity) {
-                collection('insert', activity);
+                var activityProjection = activity;
+                activityProjection._id = new mongodb.ObjectID();
+                activityProjection.owner = {
+                    _id: new mongodb.ObjectID(),
+                    name: 'jonathan'
+                };
+                collection.insert(activityProjection);
             });
 
             domainEvents.activityUpdated.handle(function (activity) {
-                collection('update', { _id: activity._id }, activity.activity);
+                collection.execute('update', { _id: activity._id }, activity.object);
             });
 
             domainEvents.activityDeleted.handle(function (id) {
-                collection('remove', { _id: id._id });
+                collection.execute('remove', { _id: id._id });
+            });
+
+            // user Handling
+            domainEvents.userUpdated.handle(function (update) {
+                // update name
+                collection.execute('update', { 'owner._id': update._id }, {
+                    '$set': { 'owner.name': update.object.name }
+                });
+            });
+
+            domainEvents.userDeleted.handle(function (update) {
+                // also delete activity
+                collection.execute('remove', { 'owner._id': update._id });
+            });
+        }),
+        usersProjection: new MongoProjection('users', db, function (collection) {
+            // handle thise events for projection:
+            domainEvents.userCreated.handle(function (user) {
+                var userProjection = user;
+                userProjection._id = new mongodb.ObjectID();
+                collection.insert(userProjection);
+            });
+
+            domainEvents.userUpdated.handle(function (update) {
+                collection.execute('update', { _id: update._id }, update.object);
+            });
+
+            domainEvents.userDeleted.handle(function (id) {
+                collection.execute('remove', { _id: id._id });
             });
         })
     };
@@ -79,10 +126,6 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(fun
         var params = req.body;
 
         context.commands.createActivity.emit({
-            owner: {
-                _id: "123",
-                name: 'Jonathan inc.'
-            },
             desc: 'Epic Fun',
             items: [{
                     name: 'Nabada',
@@ -95,7 +138,7 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(fun
     });
 
     app.get('/activites', function (req, res) {
-        context.projections.allActivitiesProjection.query({}).then(function (activites) {
+        context.projections.activitiesProjection.query({}).then(function (activites) {
             res.json(activites);
         }).done();
     });

@@ -1,6 +1,7 @@
 /// <reference path="../typings/tsd.d.ts"/>
 
 import mongodb = require('mongodb');
+import express = require('express');
 import Q = require('q');
 Q.longStackSupport = true;
 
@@ -70,10 +71,28 @@ export class StoredEventProvider<T> extends EventProvider<T> {
 ///// Commands
 
 // Ein Command mit Parametern T
+// Ist eine Implementierung für den Server
+// verwendet express (später soll das dynamisch ein communicator channel verwenden
 export class Command<T> extends EventProvider<T> {
 
   constructor(name:string) {
     super(name);
+  }
+
+}
+
+// todo verhalten von der projection hier implementieren
+export class Aggregate<T> extends EventProvider<T> {
+
+  constructor(name:string, aggregator : (emit : (params:T) => void) => void) {
+    super(name);
+
+    var self = this;
+    var emit = function(params : T) : void {
+      self.emit(params);
+    };
+
+    aggregator(emit);
   }
 
 }
@@ -126,9 +145,9 @@ export class MongoProjection<T> {
 export class Context {
   constructor(public name : string, public db : mongodb.Db) {}
 
-  createCommand<T>(cmdName : string) : StoredEventProvider<T> {
-    return new StoredEventProvider<T>(cmdName, this.name + 'Events', this.db);
-  }
+//  createCommand<T>(cmdName : string) : StoredEventProvider<T> {
+//    return new StoredEventProvider<T>(cmdName, this.name + 'Events', this.db);
+//  }
 
   createDomainEvent<T>(name:string, eventProvider:EventProvider<T>, handlingLogic:(params:T) => void) : EventHandler<T> {
     return new EventHandler<T>(name, eventProvider, handlingLogic);
