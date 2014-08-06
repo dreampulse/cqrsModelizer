@@ -65,6 +65,17 @@ var StoredEventProvider = (function (_super) {
 })(EventProvider);
 exports.StoredEventProvider = StoredEventProvider;
 
+///////////////////
+// Domain Events
+var DomainEvent = (function (_super) {
+    __extends(DomainEvent, _super);
+    function DomainEvent(name) {
+        _super.call(this, name);
+    }
+    return DomainEvent;
+})(EventProvider);
+exports.DomainEvent = DomainEvent;
+
 ////////////////
 ///// Commands
 // Ein Command mit Parametern T
@@ -112,7 +123,9 @@ var MongoProjection = (function () {
                 return Q.npost(self.collection, mongoCmd, parms);
             },
             insert: function (params) {
-                return Q.ninvoke(self.collection, 'insert', params);
+                var p = params;
+                delete p._id; // assure _id is created by the database
+                return Q.ninvoke(self.collection, 'insert', p);
             }
         };
 
@@ -134,9 +147,10 @@ var Context = (function () {
         this.name = name;
         this.db = db;
     }
-    //  createCommand<T>(cmdName : string) : StoredEventProvider<T> {
-    //    return new StoredEventProvider<T>(cmdName, this.name + 'Events', this.db);
-    //  }
+    Context.prototype.createCommand = function (cmdName) {
+        return new StoredEventProvider(cmdName, this.name + 'Events', this.db);
+    };
+
     Context.prototype.createDomainEvent = function (name, eventProvider, handlingLogic) {
         return new EventHandler(name, eventProvider, handlingLogic);
     };

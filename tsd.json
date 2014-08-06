@@ -6,7 +6,7 @@
   "bundle": "typings/tsd.d.ts",
   "installed": {
     "node/node.d.ts": {
-      "commit": "2d77b19dfab6cc00e8d9423ffa71f621709151f8"
+      "commit": "a90450655f562a62fc329378ce323321c80ad6f8"
     },
     "q/Q.d.ts": {
       "commit": "2d77b19dfab6cc00e8d9423ffa71f621709151f8"
@@ -18,10 +18,13 @@
       "commit": "2d77b19dfab6cc00e8d9423ffa71f621709151f8"
     },
     "express/express.d.ts": {
-      "commit": "2d77b19dfab6cc00e8d9423ffa71f621709151f8"
+      "commit": "a90450655f562a62fc329378ce323321c80ad6f8"
     },
     "body-parser/body-parser.d.ts": {
       "commit": "2d77b19dfab6cc00e8d9423ffa71f621709151f8"
+    },
+    "express-validator/express-validator.d.ts": {
+      "commit": "a90450655f562a62fc329378ce323321c80ad6f8"
     }
   }
 }

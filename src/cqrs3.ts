@@ -67,6 +67,15 @@ export class StoredEventProvider<T> extends EventProvider<T> {
 }
 
 
+///////////////////
+// Domain Events
+export class DomainEvent<T> extends EventProvider<T> {
+
+  constructor(name:string) {
+    super(name);
+  }
+}
+
 ////////////////
 ///// Commands
 
@@ -78,7 +87,6 @@ export class Command<T> extends EventProvider<T> {
   constructor(name:string) {
     super(name);
   }
-
 }
 
 // todo verhalten von der projection hier implementieren
@@ -121,7 +129,9 @@ export class MongoProjection<T> {
         return Q.npost<void>(self.collection, mongoCmd, parms);  // invoke mongodb command
       },
       insert : function(params:T) {
-        return Q.ninvoke<void>(self.collection, 'insert', params);
+        var p : any = params;
+        delete p._id;  // assure _id is created by the database
+        return Q.ninvoke<void>(self.collection, 'insert', p);
       }
     };
 
@@ -145,9 +155,9 @@ export class MongoProjection<T> {
 export class Context {
   constructor(public name : string, public db : mongodb.Db) {}
 
-//  createCommand<T>(cmdName : string) : StoredEventProvider<T> {
-//    return new StoredEventProvider<T>(cmdName, this.name + 'Events', this.db);
-//  }
+  createCommand<T>(cmdName : string) : StoredEventProvider<T> {
+    return new StoredEventProvider<T>(cmdName, this.name + 'Events', this.db);
+  }
 
   createDomainEvent<T>(name:string, eventProvider:EventProvider<T>, handlingLogic:(params:T) => void) : EventHandler<T> {
     return new EventHandler<T>(name, eventProvider, handlingLogic);
