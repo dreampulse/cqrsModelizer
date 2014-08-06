@@ -61,7 +61,12 @@ export class StoredEventProvider<T> extends EventProvider<T> {
   }
 
   public emit(event:T) {
-    Q.ninvoke<void>(this.collection, 'insert', event);  // save Event to db
+    var doc = {
+      name : this.name,
+      event : event,
+      date : new Date()
+    };
+    Q.ninvoke<void>(this.collection, 'insert', doc);  // save Event to db
     super.emit(event);
   }
 }
@@ -69,10 +74,10 @@ export class StoredEventProvider<T> extends EventProvider<T> {
 
 ///////////////////
 // Domain Events
-export class DomainEvent<T> extends EventProvider<T> {
+export class DomainEvent<T> extends StoredEventProvider<T> {
 
-  constructor(name:string) {
-    super(name);
+  constructor(name:string, collectionName : string, db : mongodb.Db) {
+    super(name, collectionName, db);
   }
 }
 
@@ -112,11 +117,15 @@ export class Aggregate<T> extends EventProvider<T> {
 export interface Collection<T> {
   execute(mongoCmd : string, ...parms : any[]) : Q.Promise<void>;
   insert(params:T) : Q.Promise<void> ;
-//  update(query :any, params:T);
-//  delete(query :any);
+  update(query :any, params:T);
+  remove(query :any);
 }
 
-export class MongoProjection<T> {
+export interface ObjId {
+  _id : mongodb.ObjectID;
+}
+
+export class MongoProjection<T extends ObjId> {
   private collection : mongodb.Collection;
 
   constructor(public name : string, db : mongodb.Db, projector:(collection : Collection<T>) => void) {
@@ -129,9 +138,15 @@ export class MongoProjection<T> {
         return Q.npost<void>(self.collection, mongoCmd, parms);  // invoke mongodb command
       },
       insert : function(params:T) {
-        var p : any = params;
-        delete p._id;  // assure _id is created by the database
-        return Q.ninvoke<void>(self.collection, 'insert', p);
+        delete params._id;  // assure _id is created by the database
+        return Q.ninvoke<void>(self.collection, 'insert', params);
+      },
+      update : function(query:any, params:T) {
+        delete params._id;  // assure _id is created by the database
+        return Q.ninvoke<void>(self.collection, 'update', query, params);
+      },
+      remove : function(id : mongodb.ObjectID) {
+        return Q.ninvoke<void>(self.collection, 'remove', {_id : id});
       }
     };
 
@@ -159,8 +174,9 @@ export class Context {
     return new StoredEventProvider<T>(cmdName, this.name + 'Events', this.db);
   }
 
-  createDomainEvent<T>(name:string, eventProvider:EventProvider<T>, handlingLogic:(params:T) => void) : EventHandler<T> {
-    return new EventHandler<T>(name, eventProvider, handlingLogic);
+  domainEvent<T>(name:string) : DomainEvent<T> {
+    return new DomainEvent<T>(name, this.name, this.db);
   }
+
 }
 

@@ -1,4 +1,5 @@
 /// <reference path="./typings/tsd.d.ts"/>
+var assert = require('assert');
 var express = require('express');
 var bodyParser = require('body-parser');
 var session = require('express-session');
@@ -22,38 +23,32 @@ var DomainEvent = cqrs.DomainEvent;
 /////////////////////
 // server
 var initServer = function (db) {
-    var appContext = new Context('appContext', db);
-
     var domainEvents = {
-        userRegistered: new DomainEvent('userRegistered'),
-        userLoggedIn: new DomainEvent('userLoggedIn'),
-        userEdited: new DomainEvent('userEdited'),
-        userRemoved: new DomainEvent('userRemoved')
+        userRegistered: new DomainEvent('userRegistered', 'appContext', db),
+        userLoggedIn: new DomainEvent('userLoggedIn', 'appContext', db),
+        userEdited: new DomainEvent('userEdited', 'appContext', db),
+        userRemoved: new DomainEvent('userRemoved', 'appContext', db)
     };
 
-    // das hier ist quasi ein Aggregartor
     var projections = {
         usersProjection: new MongoProjection('users', db, function (collection) {
             // handle thise events for projection:
             domainEvents.userRegistered.handle(function (user) {
-                var userProjection = {
+                var doc = {
                     _id: new mongodb.ObjectID(),
                     email: user.email,
                     name: user.name,
                     password: user.password
                 };
-                collection.insert(userProjection);
+                collection.insert(doc);
             });
 
             domainEvents.userEdited.handle(function (updatedUser) {
-                projections.usersProjection.query({ _id: updatedUser._id }).then(function (users) {
-                    //assert(users.length == 1);
-                    collection.execute('update', { _id: updatedUser._id }, updatedUser.object);
-                });
+                collection.update({ _id: updatedUser._id }, updatedUser);
             });
 
             domainEvents.userRemoved.handle(function (id) {
-                collection.execute('remove', { _id: id });
+                collection.remove(id);
             });
         })
     };
@@ -66,9 +61,11 @@ var initServer = function (db) {
 
 // running
 var app = express();
+app.set('json spaces', '  ');
+
 app.use(logger('dev'));
 app.use(bodyParser.json());
-app.use(session({ secret: 'bak-gAt-arC-eF' }));
+app.use(session({ secret: 'bak-gAt-arC-eF', resave: true, saveUninitialized: true }));
 
 // open mongodb connection
 Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(function (db) {
@@ -78,14 +75,21 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(fun
         console.info('Server is running!');
     });
 
+    // Command: Register User
     app.put('/user', function (req, res) {
         var params = req.body;
 
-        context.domainEvents.userRegistered.emit(params);
+        context.projections.usersProjection.query({ email: params.email }).then(function (users) {
+            assert(users.length < 1, "User already registered");
 
-        res.json({ 'ok': true });
+            context.domainEvents.userRegistered.emit(params);
+            res.json({ 'ok': true });
+        }).fail(function (err) {
+            res.json(500, { 'ok': false, 'err': err });
+        });
     });
 
+    // Command: Login
     app.post('/user/login', function (req, res) {
         var params = req.body;
 
@@ -105,23 +109,35 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(fun
                     res.json({ 'ok': true });
                 }
             }
-        }).done();
+        }).fail(function (err) {
+            res.json(500, { 'ok': false, 'err': err });
+        });
     });
 
+    // Command: Edit User
     app.post('/user', function (req, res) {
         var params = req.body;
         if (req.session.user) {
-            var update = {
-                _id: req.session.user._id,
-                object: params
-            };
-            context.domainEvents.userEdited.emit(update);
+            context.projections.usersProjection.query({ _id: req.session.user._id }).then(function (users) {
+                assert(users.length == 1, "User not found");
+
+                var doc = params;
+                doc._id = req.session.user._id;
+
+                context.domainEvents.userEdited.emit(doc);
+            }).fail(function (err) {
+                res.json(500, { 'ok': false, 'err': err });
+            });
+        } else {
+            res.json(401, { 'ok': false, 'err': 'not logged in' });
         }
     });
 
+    // Command: Delete User
     app.delete('/user', function (req, res) {
         if (req.session.user) {
             context.domainEvents.userRemoved.emit(req.session.user._id);
+            delete req.session.user;
         }
     });
 

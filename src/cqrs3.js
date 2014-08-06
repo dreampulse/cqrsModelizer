@@ -58,7 +58,12 @@ var StoredEventProvider = (function (_super) {
         this.collection = db.collection(collectionName);
     }
     StoredEventProvider.prototype.emit = function (event) {
-        Q.ninvoke(this.collection, 'insert', event); // save Event to db
+        var doc = {
+            name: this.name,
+            event: event,
+            date: new Date()
+        };
+        Q.ninvoke(this.collection, 'insert', doc); // save Event to db
         _super.prototype.emit.call(this, event);
     };
     return StoredEventProvider;
@@ -69,11 +74,11 @@ exports.StoredEventProvider = StoredEventProvider;
 // Domain Events
 var DomainEvent = (function (_super) {
     __extends(DomainEvent, _super);
-    function DomainEvent(name) {
-        _super.call(this, name);
+    function DomainEvent(name, collectionName, db) {
+        _super.call(this, name, collectionName, db);
     }
     return DomainEvent;
-})(EventProvider);
+})(StoredEventProvider);
 exports.DomainEvent = DomainEvent;
 
 ////////////////
@@ -123,9 +128,15 @@ var MongoProjection = (function () {
                 return Q.npost(self.collection, mongoCmd, parms);
             },
             insert: function (params) {
-                var p = params;
-                delete p._id; // assure _id is created by the database
-                return Q.ninvoke(self.collection, 'insert', p);
+                delete params._id; // assure _id is created by the database
+                return Q.ninvoke(self.collection, 'insert', params);
+            },
+            update: function (query, params) {
+                delete params._id; // assure _id is created by the database
+                return Q.ninvoke(self.collection, 'update', query, params);
+            },
+            remove: function (id) {
+                return Q.ninvoke(self.collection, 'remove', { _id: id });
             }
         };
 
@@ -151,8 +162,8 @@ var Context = (function () {
         return new StoredEventProvider(cmdName, this.name + 'Events', this.db);
     };
 
-    Context.prototype.createDomainEvent = function (name, eventProvider, handlingLogic) {
-        return new EventHandler(name, eventProvider, handlingLogic);
+    Context.prototype.domainEvent = function (name) {
+        return new DomainEvent(name, this.name, this.db);
     };
     return Context;
 })();
