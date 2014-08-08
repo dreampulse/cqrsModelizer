@@ -81,6 +81,7 @@ export class DomainEvent<T> extends StoredEventProvider<T> {
   }
 }
 
+
 ////////////////
 ///// Commands
 

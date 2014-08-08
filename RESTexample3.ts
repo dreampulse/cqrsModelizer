@@ -33,7 +33,7 @@ interface Empty {}
 ////////// Domain Entities
 
 
-module Activities {
+module Activity {
 
   export interface BookableItem {
     name : string;
@@ -45,6 +45,17 @@ module Activities {
     desc : string;
     items : BookableItem[];
   }
+
+  export interface ForAllDoc extends Activity {
+    _id : mongodb.ObjectID;
+    owner : string;
+  }
+
+  export interface ForProvidersDoc extends Activity {
+    _id : mongodb.ObjectID;
+    owner : mongodb.ObjectID;
+  }
+
 
 }
 
@@ -71,21 +82,18 @@ module User {
 // Projections
 
 
-module Projections {
 
-  export module Activity {
+ module Activity {
+
     export interface User {
       _id : mongodb.ObjectID;
       name : string;
     }
 
-    export interface Activities extends Activities.Activity {
+    export interface Activities extends Activity.Activity {
       _id : mongodb.ObjectID;
       owner : User;
     }
-  }
-
-
 }
 
 
