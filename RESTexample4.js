@@ -4,11 +4,13 @@ var bodyParser = require('body-parser');
 var session = require('express-session');
 var logger = require('morgan');
 
+var Joi = require('joi');
+
 var mongodb = require('mongodb');
 var Q = require('q');
 Q.longStackSupport = true;
 
-var cqrs = require('./src/cqrs4');
+var cqrs = require('./src/cqrs5');
 var EventProvider = cqrs.EventProvider;
 var StoredEventProvider = cqrs.StoredEventProvider;
 var EventHandler = cqrs.EventHandler;
@@ -16,21 +18,47 @@ var Context = cqrs.Context;
 var MongoProjection = cqrs.MongoProjection;
 var DomainEvent = cqrs.DomainEvent;
 
-
+var Entities = require('./entities');
 
 /////////////////////
 // server
 var initServer = function (db) {
     var domainEvents = {
-        activityAdded: new DomainEvent('activityAdded', 'appContext', db)
+        activityAdded: new DomainEvent('activityAdded', 'appContext', db),
+        activityUpdated: new DomainEvent('activityUpdated', 'appContext', db),
+        activityDeleted: new DomainEvent('activityDeleted', 'appContext', db)
     };
 
     var projections = {
         allActivitiesProjection: new MongoProjection('allActivities', db, function (collection) {
             domainEvents.activityAdded.handle(function (activity, user) {
                 var doc = activity;
+                doc.owner = user._id;
                 doc.owner_name = user.name;
+
                 collection.insert(doc);
+            });
+
+            domainEvents.activityUpdated.handle(function (activity, user) {
+                var doc = activity;
+                doc.owner = user._id;
+                doc.owner_name = user.name;
+
+                collection.update({
+                    _id: activity._id,
+                    owner: user._id
+                }, doc);
+            });
+
+            domainEvents.activityDeleted.handle(function (objID, user) {
+                console.log({
+                    _id: objID._id,
+                    owner: user._id
+                });
+                collection.remove({
+                    _id: objID._id,
+                    owner: user._id
+                });
             });
         }),
         providerActivitiesProjection: new MongoProjection('allActivities', db, function (collection) {
@@ -82,31 +110,47 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(fun
     });
 
     // loadtest -n 1000 -c 4 -T "Content-Type: application/json" -P "{}" http://localhost:3000/activity
-    // ab -c 4 -n 10000 -T "Content-Type: application/json" -p test.data.json http://127.0.0.1:3000/activity
-    app.post('/activity', function (req, res) {
+    // ab -c 1 -n 1 -T "Content-Type: application/json" -u test.data.json http://127.0.0.1:3000/activity
+    // curl -X PUT -H "Content-Type: application/json" --data @test.data.json http://localhost:3000/activity
+    app.put('/activity', function (req, res) {
         var params = req.body;
 
-        params = {
-            desc: 'Nabada',
-            bookableItems: [
-                {
-                    name: "Wildes Nabada",
-                    price: 0,
-                    quantity: 20000
-                }, {
-                    name: "After Party",
-                    price: 8,
-                    quantity: 5000
-                }
-            ]
-        };
+        Joi.assert(params, Entities.ActivitySchema);
 
+        //Joi.validate(params, Entities.ActivitySchema, (err, val) => {});
         if (req.session.isAuth()) {
             context.domainEvents.activityAdded.emit(params, req.session.user);
             res.json({ ok: true });
         }
     });
 
+    // update
+    app.post('/activity', function (req, res) {
+        var params = req.body;
+
+        Joi.assert(params, Entities.ActivitySchema.keys({ _id: Joi.string().required() }).required());
+        params._id = new mongodb.ObjectID(req.body._id);
+
+        if (req.session.isAuth()) {
+            context.domainEvents.activityUpdated.emit(params, req.session.user);
+            res.json({ ok: true });
+        }
+    });
+
+    // delete
+    app.delete('/activity', function (req, res) {
+        var params = req.body;
+
+        Joi.assert(params, Joi.object().keys({ _id: Joi.string().required() }).required());
+        params._id = new mongodb.ObjectID(req.body._id);
+
+        if (req.session.isAuth()) {
+            context.domainEvents.activityDeleted.emit(params, req.session.user);
+            res.json({ ok: true });
+        }
+    });
+
+    // projection
     app.get('/activities', function (req, res) {
         context.projections.allActivitiesProjection.query({}).then(function (activities) {
             res.json(activities);

@@ -6,3 +6,4 @@
 /// <reference path="body-parser/body-parser.d.ts" />
 /// <reference path="express-validator/express-validator.d.ts" />
 /// <reference path="assert/assert.d.ts" />
+/// <reference path="joi/joi.d.ts" />

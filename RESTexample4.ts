@@ -6,13 +6,14 @@ import bodyParser = require('body-parser');
 var session = require('express-session');
 var logger = require('morgan');
 
+import Joi = require('joi');
+
 import mongodb = require('mongodb');
 import Q = require('q');
 Q.longStackSupport = true;
 
 
-
-import cqrs = require('./src/cqrs4');
+import cqrs = require('./src/cqrs5');
 var EventProvider = cqrs.EventProvider;
 var StoredEventProvider = cqrs.StoredEventProvider;
 var EventHandler = cqrs.EventHandler;
@@ -20,8 +21,10 @@ var Context = cqrs.Context;
 var MongoProjection = cqrs.MongoProjection;
 var DomainEvent = cqrs.DomainEvent;
 
+import Entities = require('./entities');
+
 module States {
-  export interface User extends User.Doc {}
+  export interface User extends Entities.User.Doc {}
 }
 
 interface ExpressRequest extends express.Request {
@@ -33,105 +36,62 @@ interface ExpressRequest extends express.Request {
 
 interface Empty {}
 
-////////////////////////////
-////////// Domain Entities
 
-
-module Activity {
-
-//  export interface BookableItem {
-//    name : string;
-//    price : number;
-//    quantity : number;
-//  }
-
-  export interface Activity {
-    desc : string;
-    bookableItems : {
-      name : string;
-      price : number;
-      quantity : number;
-    }[];
-  }
-
-  export interface ForAllDoc extends Activity {
-    _id : mongodb.ObjectID;
-    owner_name : string;
-  }
-
-  export interface ForProvidersDoc extends Activity {
-    _id : mongodb.ObjectID;
-    owner : mongodb.ObjectID;
-  }
-
-
-}
-
-module User {
-  export interface User {
-    name : string;
-    email : string;
-    password : string;
-  }
-
-  export interface Login {
-    email : string;
-    password : string;
-  }
-
-  export interface Doc extends User {
-    _id : mongodb.ObjectID;
-  }
-
-}
-
-
-///////////////////////////
-// Projections
-
-
-
- module Activity {
-
-    export interface User {
-      _id : mongodb.ObjectID;
-      name : string;
-    }
-
-    export interface Activities extends Activity.Activity {
-      _id : mongodb.ObjectID;
-      owner : User;
-    }
-}
 
 
 /////////////////////
 // server
 
-
 var initServer = function (db:mongodb.Db) {
 
   var domainEvents = {
-      activityAdded: new DomainEvent<Activity.Activity, States.User>('activityAdded', 'appContext', db)
+    activityAdded: new DomainEvent<Entities.Activity, States.User>('activityAdded', 'appContext', db),
+    activityUpdated: new DomainEvent<Entities.Activity.Doc, States.User>('activityUpdated', 'appContext', db),
+    activityDeleted: new DomainEvent<cqrs.ObjId, States.User>('activityDeleted', 'appContext', db)
   };
-
 
   var projections = {
 
-      allActivitiesProjection: new MongoProjection<Activity.ForAllDoc>('allActivities', db, (collection) =>{
+      allActivitiesProjection: new MongoProjection<Entities.Activity.ForAllDoc>('allActivities', db, (collection) =>{
 
-        domainEvents.activityAdded.handle((activity:Activity.Activity, user:States.User) => {
-          var doc = <Activity.ForAllDoc>activity;
+        domainEvents.activityAdded.handle((activity:Entities.Activity, user:States.User) => {
+          var doc = <Entities.Activity.ForAllDoc>activity;
+          doc.owner = user._id;
           doc.owner_name = user.name;
+
           collection.insert(doc);
+        });
+
+        domainEvents.activityUpdated.handle((activity:Entities.Activity.Doc, user:States.User) => {
+          var doc = <Entities.Activity.ForAllDoc>activity;
+          doc.owner = user._id;
+          doc.owner_name = user.name;
+
+          collection.update({
+            _id : activity._id,
+            owner:user._id // only allow to change user documents
+          }, doc);
+
+        });
+
+        domainEvents.activityDeleted.handle((objID:cqrs.ObjId, user:States.User) => {
+          console.log({
+            _id : objID._id,
+            owner:user._id // only allow to change user documents
+          });
+          collection.remove({
+            _id : objID._id,
+            owner:user._id // only allow to change user documents
+          });
+
         });
 
       }),
 
-      providerActivitiesProjection: new MongoProjection<Activity.ForProvidersDoc>('allActivities', db, (collection) =>{
+      providerActivitiesProjection: new MongoProjection<Entities.Activity.ForProvidersDoc>('allActivities', db, (collection) =>{
 
-        domainEvents.activityAdded.handle((activity:Activity.Activity, user:States.User) => {
-          var doc = <Activity.ForProvidersDoc>activity;
+        domainEvents.activityAdded.handle((activity:Entities.Activity, user:States.User) => {
+          var doc = <Entities.Activity.ForProvidersDoc>activity;
           doc.owner = user._id;
           collection.insert(doc);
         });
@@ -156,7 +116,6 @@ app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(session({secret: 'bak-gAt-arC-eF', resave: true, saveUninitialized: true}));
 
-
 // open mongodb connection
 Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs')
   .then((db:mongodb.Db) => {
@@ -167,7 +126,7 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs')
       console.info('Server is running!')
     });
 
-    var theUser : User.Doc = {
+    var theUser : Entities.User.Doc = {
       name : "Jonathan",
       email : "sqrs-test@dreampulse.de",
       password : "secret",
@@ -184,24 +143,13 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs')
 
 
     // loadtest -n 1000 -c 4 -T "Content-Type: application/json" -P "{}" http://localhost:3000/activity
-    // ab -c 4 -n 10000 -T "Content-Type: application/json" -p test.data.json http://127.0.0.1:3000/activity
-    app.post('/activity', (req:ExpressRequest, res:express.Response) => {
-      var params = <Activity.Activity>req.body;
+    // ab -c 1 -n 1 -T "Content-Type: application/json" -u test.data.json http://127.0.0.1:3000/activity
+    // curl -X PUT -H "Content-Type: application/json" --data @test.data.json http://localhost:3000/activity
+    app.put('/activity', (req:ExpressRequest, res:express.Response) => {
+      var params = <Entities.Activity>req.body;
 
-      params = {
-        desc : 'Nabada',
-        bookableItems : [
-          {
-            name : "Wildes Nabada",
-            price : 0,
-            quantity : 20000
-          }, {
-            name : "After Party",
-            price : 8,
-            quantity : 5000
-          }
-        ]
-      };
+      Joi.assert(params, Entities.ActivitySchema);
+      //Joi.validate(params, Entities.ActivitySchema, (err, val) => {});
 
       if (req.session.isAuth()) {
         context.domainEvents.activityAdded.emit(params, req.session.user);
@@ -209,10 +157,38 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs')
       }
     });
 
+    // update
+    app.post('/activity', (req:ExpressRequest, res:express.Response) => {
+      var params = <Entities.Activity.Doc>req.body;
 
+      Joi.assert(params, Entities.ActivitySchema.keys({ _id: Joi.string().required() }).required());
+      params._id = new mongodb.ObjectID(req.body._id);
+
+      if (req.session.isAuth()) {
+        context.domainEvents.activityUpdated.emit(params, req.session.user);
+        res.json({ok:true});
+      }
+    });
+
+    // delete
+    app.delete('/activity', (req:ExpressRequest, res:express.Response) => {
+      var params = <cqrs.ObjId>req.body;
+
+      Joi.assert(params, Joi.object().keys({_id: Joi.string().required()}).required());
+      params._id = new mongodb.ObjectID(req.body._id);
+
+      if (req.session.isAuth()) {
+        context.domainEvents.activityDeleted.emit(params, req.session.user);
+        res.json({ok:true});
+      }
+    });
+
+
+
+    // projection
     app.get('/activities', (req:ExpressRequest, res:express.Response) => {
         context.projections.allActivitiesProjection.query({})
-          .then((activities : Activity.ForAllDoc[]) => {
+          .then((activities : Entities.Activity.ForAllDoc[]) => {
             res.json(activities);
           }).done();
     });

@@ -1,0 +1,16 @@
+{
+  "desc": "Nabada",
+  "bookableItems": [
+    {
+      "name": "Wildes Nabada",
+      "price": 0,
+      "quantity": 20000
+    },
+    {
+      "name": "Vip Party",
+      "price": 100,
+      "quantity": 50
+    }
+  ],
+  "_id" : "53e56c3129fa10f96980aae5"
+}

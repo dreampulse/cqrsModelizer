@@ -16,7 +16,11 @@
     "express-validator": "^2.3.0",
     "morgan": "^1.2.2",
     "express-session": "^1.7.4",
-    "assert": "^1.1.1"
+    "assert": "^1.1.1",
+    "chai": "^1.9.1",
+    "chai-json-schema": "^1.1.0",
+    "joi": "^4.6.2",
+    "express-joi": "^0.3.0"
   },
   "repository": {
     "type": "git",

@@ -17,11 +17,11 @@ var MongoProjection = cqrs.MongoProjection;
 // server
 var initServer = function (db) {
     var commands = {
-        createShoppingItem: new EventProvider('createShoppingItem')
+        createShoppingItem: new StatefulEventProvider('createShoppingItem')
     };
 
     var domainEvents = {
-        shoppingItemCreated: new EventHandler('shoppingItemCreated', commands.createShoppingItem, function (item) {
+        shoppingItemCreated: new StatefulEventHandler('shoppingItemCreated', commands.createShoppingItem, function (item) {
             // business logic
         })
     };

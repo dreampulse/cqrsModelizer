@@ -41,12 +41,12 @@ interface SpecialOfferShoppingItem {
 var initServer = function (db:mongodb.Db) {
 
   var commands = {
-    createShoppingItem: new EventProvider<Item>('createShoppingItem')
+    createShoppingItem: new StatefulEventProvider<Item>('createShoppingItem')
   };
 
 
   var domainEvents = {
-    shoppingItemCreated: new EventHandler<Item>('shoppingItemCreated', commands.createShoppingItem, (item) => {
+    shoppingItemCreated: new StatefulEventHandler<Item>('shoppingItemCreated', commands.createShoppingItem, (item) => {
       // business logic
 
     })
