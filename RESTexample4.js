@@ -24,14 +24,14 @@ var Entities = require('./entities');
 // server
 var initServer = function (db) {
     var domainEvents = {
-        activityAdded: new DomainEvent('activityAdded', 'appContext', db),
+        activityCreated: new DomainEvent('activityCreated', 'appContext', db),
         activityUpdated: new DomainEvent('activityUpdated', 'appContext', db),
         activityDeleted: new DomainEvent('activityDeleted', 'appContext', db)
     };
 
     var projections = {
         allActivitiesProjection: new MongoProjection('allActivities', db, function (collection) {
-            domainEvents.activityAdded.handle(function (activity, user) {
+            domainEvents.activityCreated.handle(function (activity, user) {
                 var doc = activity;
                 doc.owner = user._id;
                 doc.owner_name = user.name;
@@ -62,7 +62,7 @@ var initServer = function (db) {
             });
         }),
         providerActivitiesProjection: new MongoProjection('allActivities', db, function (collection) {
-            domainEvents.activityAdded.handle(function (activity, user) {
+            domainEvents.activityCreated.handle(function (activity, user) {
                 var doc = activity;
                 doc.owner = user._id;
                 collection.insert(doc);
@@ -109,9 +109,6 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(fun
         next();
     });
 
-    // loadtest -n 1000 -c 4 -T "Content-Type: application/json" -P "{}" http://localhost:3000/activity
-    // ab -c 1 -n 1 -T "Content-Type: application/json" -u test.data.json http://127.0.0.1:3000/activity
-    // curl -X PUT -H "Content-Type: application/json" --data @test.data.json http://localhost:3000/activity
     app.put('/activity', function (req, res) {
         var params = req.body;
 
@@ -119,7 +116,7 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(fun
 
         //Joi.validate(params, Entities.ActivitySchema, (err, val) => {});
         if (req.session.isAuth()) {
-            context.domainEvents.activityAdded.emit(params, req.session.user);
+            context.domainEvents.activityCreated.emit(params, req.session.user);
             res.json({ ok: true });
         }
     });
@@ -157,4 +154,7 @@ Q.nfcall(mongodb.MongoClient.connect, 'mongodb://127.0.0.1:27017/cqrs').then(fun
         }).done();
     });
 }).done();
+// loadtest -n 1000 -c 4 -T "Content-Type: application/json" -P "{}" http://localhost:3000/activity
+// ab -c 1 -n 1 -T "Content-Type: application/json" -u test.data.json http://127.0.0.1:3000/activity
+// curl -X PUT -H "Content-Type: application/json" --data @test.data.json http://localhost:3000/activity
 //# sourceMappingURL=RESTexample4.js.map

@@ -3,17 +3,19 @@
     <properties>
       <sourceFilesUrls>
         <item url="file://$PROJECT_DIR$/example.js" />
-        <item url="file://$PROJECT_DIR$/src/cqrs2.js" />
         <item url="file://$PROJECT_DIR$/src/cqrs5.js" />
         <item url="file://$PROJECT_DIR$/RESTexample3.js" />
+        <item url="file://$PROJECT_DIR$/src/helpers.js" />
+        <item url="file://$PROJECT_DIR$/entities.js" />
+        <item url="file://$PROJECT_DIR$/RESTexample2.js" />
+        <item url="file://$PROJECT_DIR$/src/cqrs2.js" />
         <item url="file://$PROJECT_DIR$/src/cqrs.js" />
-        <item url="file://$PROJECT_DIR$/interfaces.js" />
         <item url="file://$PROJECT_DIR$/RESTexample4.js" />
         <item url="file://$PROJECT_DIR$/pragmaticCqrs.js" />
         <item url="file://$PROJECT_DIR$/RESTexample.js" />
-        <item url="file://$PROJECT_DIR$/src/cqrs3.js" />
+        <item url="file://$PROJECT_DIR$/RESTexample5.js" />
         <item url="file://$PROJECT_DIR$/src/cqrs4.js" />
-        <item url="file://$PROJECT_DIR$/RESTexample2.js" />
+        <item url="file://$PROJECT_DIR$/src/cqrs3.js" />
       </sourceFilesUrls>
     </properties>
     <CLASSES>
@@ -21,14 +23,16 @@
       <root url="file://$PROJECT_DIR$/src/cqrs5.js" />
       <root url="file://$PROJECT_DIR$/RESTexample3.js" />
       <root url="file://$PROJECT_DIR$/entities.js" />
+      <root url="file://$PROJECT_DIR$/src/helpers.js" />
       <root url="file://$PROJECT_DIR$/RESTexample2.js" />
       <root url="file://$PROJECT_DIR$/src/cqrs2.js" />
       <root url="file://$PROJECT_DIR$/src/cqrs.js" />
       <root url="file://$PROJECT_DIR$/RESTexample4.js" />
       <root url="file://$PROJECT_DIR$/pragmaticCqrs.js" />
+      <root url="file://$PROJECT_DIR$/RESTexample5.js" />
       <root url="file://$PROJECT_DIR$/RESTexample.js" />
-      <root url="file://$PROJECT_DIR$/src/cqrs4.js" />
       <root url="file://$PROJECT_DIR$/src/cqrs3.js" />
+      <root url="file://$PROJECT_DIR$/src/cqrs4.js" />
     </CLASSES>
     <SOURCES />
   </library>
