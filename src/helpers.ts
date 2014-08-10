@@ -1,6 +1,8 @@
 /// <reference path="../typings/tsd.d.ts"/>
 
 import mongodb = require('mongodb');
+import express = require('express');
+import Joi = require('joi');
 import Q = require('q');
 Q.longStackSupport = true;
 
@@ -55,3 +57,24 @@ export class MongoCURDProjection<T extends DefaultDoc, S extends cqrs.ObjId> {
     return this.projection.query(params);
   }
 }
+
+
+export interface BasicRequestWithSession extends express.Request {
+  session : {
+    user : any;
+  };
+}
+
+export var Resource = function<T>(app : express.Application, method : string, name : string, event : cqrs.DomainEvent<T, BasicRequestWithSession>, schema? : Joi.ObjectSchema) {
+
+  app[method]('/' + name, (req:BasicRequestWithSession, res:express.Response) => {
+
+    var params = <T>req.body;
+
+    if (schema) Joi.assert(params, schema);
+
+    event.emit(params, req.session.user);
+    res.json({ok:true});
+  });
+};
+
