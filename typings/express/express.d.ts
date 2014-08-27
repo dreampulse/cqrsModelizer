@@ -686,7 +686,7 @@ declare module "express" {
              *
              * Examples:
              *
-             *    res.location('/foo/bar').;
+             *    res.location('/payload/bar').;
              *    res.location('http://example.com');
              *    res.location('../login'); // /blog/post/1 -> /blog/login
              *
@@ -717,7 +717,7 @@ declare module "express" {
              *
              * Examples:
              *
-             *    res.redirect('/foo/bar');
+             *    res.redirect('/payload/bar');
              *    res.redirect('http://example.com');
              *    res.redirect(301, 'http://example.com');
              *    res.redirect('http://example.com', 301);
@@ -780,7 +780,7 @@ declare module "express" {
              *
              * By default will `require()` the engine based on the
              * file extension. For example if you try to render
-             * a "foo.jade" file Express will invoke the following internally:
+             * a "payload.jade" file Express will invoke the following internally:
              *
              *     app.engine('jade', require('jade').__express);
              *
@@ -807,8 +807,8 @@ declare module "express" {
             /**
              * Assign `setting` to `val`, or return `setting`'s value.
              *
-             *    app.set('foo', 'bar');
-             *    app.get('foo');
+             *    app.set('payload', 'bar');
+             *    app.get('payload');
              *    // => "bar"
              *
              * Mounted servers inherit their parent server's settings.
@@ -838,11 +838,11 @@ declare module "express" {
             /**
              * Check if `setting` is enabled (truthy).
              *
-             *    app.enabled('foo')
+             *    app.enabled('payload')
              *    // => false
              *
-             *    app.enable('foo')
-             *    app.enabled('foo')
+             *    app.enable('payload')
+             *    app.enabled('payload')
              *    // => true
              */
             enabled(setting: string): boolean;
@@ -850,11 +850,11 @@ declare module "express" {
             /**
              * Check if `setting` is disabled.
              *
-             *    app.disabled('foo')
+             *    app.disabled('payload')
              *    // => true
              *
-             *    app.enable('foo')
-             *    app.disabled('foo')
+             *    app.enable('payload')
+             *    app.disabled('payload')
              *    // => false
              *
              * @param setting

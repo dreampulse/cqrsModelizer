@@ -6,48 +6,128 @@ import Q = require('q');
 Q.longStackSupport = true;
 
 
-////////////////////////////
-// Events
-
-export class StatefulEventProvider<T,S> {
-
-  constructor(public name : string) {}
-
-  eventHandlers : { [name:string] : (event:T, state:S) => void } = {};
-
-  public handle(eventHandler : (event:T, state:S) => void) {
-    this.eventHandlers[this.name] = eventHandler;
-  }
-
-  public emit(event:T, state:S) {
-    for (var i in this.eventHandlers) {
-      this.eventHandlers[i](event, state);
-    }
-  }
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Event Providers
 
 
+/**
+ *  @EventProvider
+ *  - you can emit an event of Type T
+ *  - and register to handle this event
+ */
 export class EventProvider<T> {
 
   constructor(public name : string) {}
 
-  eventHandlers : { [name:string] : (event:T) => void } = {};
+  eventHandlers : Array<(event:T) => void> = [];
 
   public handle(eventHandler : (event:T) => void) {
-    this.eventHandlers[this.name] = eventHandler;
+    this.eventHandlers.push(eventHandler);
   }
 
   public emit(event:T) {
-    for (var i in this.eventHandlers) {
-      this.eventHandlers[i](event);
-    }
+    this.eventHandlers.forEach(handler => handler(event));
   }
 }
+
+/**
+ *  @StatefulEventProvider
+ *  same as a regular @EventProvider
+ *  but you a parametrize the Event with a "State"
+ */
+export class StatefulEventProvider<T,S> {
+
+  constructor(public name : string) {}
+
+  eventHandlers : Array< (event:T, state:S) => void > = [];
+
+  public handle(eventHandler : (event:T, state:S) => void) {
+    this.eventHandlers.push(eventHandler);
+  }
+
+  public emit(event:T, state:S) {
+    this.eventHandlers.forEach(handler => handler(event, state));
+  }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Stateful Event Providers
+
+/**
+ *  @StatefulStoredEventProvider
+ *  same as @StatefulEventProvider
+ *  but all events are stored when you @emit() an event to a MongoDB
+ */
+export class StatefulStoredEventProvider<T,S> extends StatefulEventProvider<T,S> {
+  private collection : mongodb.Collection;
+
+  constructor(name:string, collectionName : string, db : mongodb.Db) {
+    super(name);
+
+    this.collection = db.collection(collectionName);
+  }
+
+  public emit(event:T, state:S) {
+    this.emitQ(event, state);
+  }
+
+  public emitQ(event:T, state:S) : Q.Promise<void> {
+    var doc = {
+      name : this.name,
+      event : event,
+      state : state,
+      date : new Date()
+    };
+    super.emit(event, state);
+    return Q.ninvoke<void>(this.collection, 'insert', doc);  // save Event to db
+  }
+}
+
+
+/*  Not Needed  */
+//export class StoredEventProvider<T> extends EventProvider<T> {
+//  private collection : mongodb.Collection;
+//
+//  constructor(name:string, collectionName : string, db : mongodb.Db) {
+//    super(name);
+//
+//    this.collection = db.collection(collectionName);
+//  }
+//
+//  public emit(event:T) {
+//    var doc = {
+//      name : this.name,
+//      event : event,
+//      date : new Date()
+//    };
+//    Q.ninvoke<void>(this.collection, 'insert', doc);  // save Event to db
+//    super.emit(event);
+//  }
+//}
 
 
 
 ///////////////////////
 // Event Handler
+
+export class EventHandler<T> extends EventProvider<T> {
+
+  constructor(name:string, eventProvider:EventProvider<T>, handlingLogic:(params:T) => void) {
+    super(name);
+
+    // als handler für ein command registieren
+    eventProvider.handle((params:T) => {
+      // was passieren soll, wenn das Event ausgelöst wurde
+
+      handlingLogic(params);  // die Business Logik für das Event ausführen
+      this.emit(params); // das Event an die hanlder (z.B. Projections) senden, die sich für das Event interessiern
+
+    });
+  }
+
+}
+
 
 // Handelt Events (HanldingLogic) und löst neue Events aus
 export class StatefulEventHandler<T,S> extends StatefulEventProvider<T,S> {
@@ -67,65 +147,8 @@ export class StatefulEventHandler<T,S> extends StatefulEventProvider<T,S> {
 
 }
 
-export class EventHandler<T> extends EventProvider<T> {
 
-  constructor(name:string, eventProvider:EventProvider<T>, handlingLogic:(params:T) => void) {
-    super(name);
 
-    // als handler für ein command registieren
-    eventProvider.handle((params:T) => {
-      // was passieren soll, wenn das Event ausgelöst wurde
-
-      handlingLogic(params);  // die Business Logik für das Event ausführen
-      this.emit(params); // das Event an die hanlder (z.B. Projections) senden, die sich für das Event interessiern
-
-    });
-  }
-
-}
-
-////////////////
-///// Event Store
-export class StatefulStoredEventProvider<T,S> extends StatefulEventProvider<T,S> {
-  private collection : mongodb.Collection;
-
-  constructor(name:string, collectionName : string, db : mongodb.Db) {
-    super(name);
-
-    this.collection = db.collection(collectionName);
-  }
-
-  public emit(event:T, state:S) {
-    var doc = {
-      name : this.name,
-      event : event,
-      state : state,
-      date : new Date()
-    };
-    Q.ninvoke<void>(this.collection, 'insert', doc);  // save Event to db
-    super.emit(event, state);
-  }
-}
-
-export class StoredEventProvider<T> extends EventProvider<T> {
-  private collection : mongodb.Collection;
-
-  constructor(name:string, collectionName : string, db : mongodb.Db) {
-    super(name);
-
-    this.collection = db.collection(collectionName);
-  }
-
-  public emit(event:T) {
-    var doc = {
-      name : this.name,
-      event : event,
-      date : new Date()
-    };
-    Q.ninvoke<void>(this.collection, 'insert', doc);  // save Event to db
-    super.emit(event);
-  }
-}
 
 
 ///////////////////
@@ -166,20 +189,22 @@ export class Aggregate<T> extends EventProvider<T> {
 }
 
 
-export class StoredAggregate<T> extends StoredEventProvider<T> {
+/* not needed */
+//export class StoredAggregate<T> extends StoredEventProvider<T> {
+//
+//  constructor(name:string, collectionName : string, db : mongodb.Db, aggregator : (emit : (params:T) => void) => void) {
+//    super(name, collectionName, db);
+//
+//    var self = this;
+//    var emit = function(params : T) : void {
+//      self.emit(params);
+//    };
+//
+//    aggregator(emit);
+//  }
+//
+//}
 
-  constructor(name:string, collectionName : string, db : mongodb.Db, aggregator : (emit : (params:T) => void) => void) {
-    super(name, collectionName, db);
-
-    var self = this;
-    var emit = function(params : T) : void {
-      self.emit(params);
-    };
-
-    aggregator(emit);
-  }
-
-}
 
 /////////////////////
 // Projections

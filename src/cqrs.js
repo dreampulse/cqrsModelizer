@@ -8,64 +8,108 @@ var __extends = this.__extends || function (d, b) {
 var Q = require('q');
 Q.longStackSupport = true;
 
-////////////////////////////
-// Events
-var StatefulEventProvider = (function () {
-    function StatefulEventProvider(name) {
-        this.name = name;
-        this.eventHandlers = {};
-    }
-    StatefulEventProvider.prototype.handle = function (eventHandler) {
-        this.eventHandlers[this.name] = eventHandler;
-    };
-
-    StatefulEventProvider.prototype.emit = function (event, state) {
-        for (var i in this.eventHandlers) {
-            this.eventHandlers[i](event, state);
-        }
-    };
-    return StatefulEventProvider;
-})();
-exports.StatefulEventProvider = StatefulEventProvider;
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Event Providers
+/**
+*  @EventProvider
+*  - you can emit an event of Type T
+*  - and register to handle this event
+*/
 var EventProvider = (function () {
     function EventProvider(name) {
         this.name = name;
-        this.eventHandlers = {};
+        this.eventHandlers = [];
     }
     EventProvider.prototype.handle = function (eventHandler) {
-        this.eventHandlers[this.name] = eventHandler;
+        this.eventHandlers.push(eventHandler);
     };
 
     EventProvider.prototype.emit = function (event) {
-        for (var i in this.eventHandlers) {
-            this.eventHandlers[i](event);
-        }
+        this.eventHandlers.forEach(function (handler) {
+            return handler(event);
+        });
     };
     return EventProvider;
 })();
 exports.EventProvider = EventProvider;
 
-///////////////////////
-// Event Handler
-// Handelt Events (HanldingLogic) und löst neue Events aus
-var StatefulEventHandler = (function (_super) {
-    __extends(StatefulEventHandler, _super);
-    function StatefulEventHandler(name, eventProvider, handlingLogic) {
-        var _this = this;
+/**
+*  @StatefulEventProvider
+*  same as a regular @EventProvider
+*  but you a parametrize the Event with a "State"
+*/
+var StatefulEventProvider = (function () {
+    function StatefulEventProvider(name) {
+        this.name = name;
+        this.eventHandlers = [];
+    }
+    StatefulEventProvider.prototype.handle = function (eventHandler) {
+        this.eventHandlers.push(eventHandler);
+    };
+
+    StatefulEventProvider.prototype.emit = function (event, state) {
+        this.eventHandlers.forEach(function (handler) {
+            return handler(event, state);
+        });
+    };
+    return StatefulEventProvider;
+})();
+exports.StatefulEventProvider = StatefulEventProvider;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Stateful Event Providers
+/**
+*  @StatefulStoredEventProvider
+*  same as @StatefulEventProvider
+*  but all events are stored when you @emit() an event to a MongoDB
+*/
+var StatefulStoredEventProvider = (function (_super) {
+    __extends(StatefulStoredEventProvider, _super);
+    function StatefulStoredEventProvider(name, collectionName, db) {
         _super.call(this, name);
 
-        // als handler für ein command registieren
-        eventProvider.handle(function (params, state) {
-            // was passieren soll, wenn das Event ausgelöst wurde
-            handlingLogic(params, state); // die Business Logik für das Event ausführen
-            _this.emit(params, state); // das Event an die hanlder (z.B. Projections) senden, die sich für das Event interessiern
-        });
+        this.collection = db.collection(collectionName);
     }
-    return StatefulEventHandler;
-})(StatefulEventProvider);
-exports.StatefulEventHandler = StatefulEventHandler;
+    StatefulStoredEventProvider.prototype.emit = function (event, state) {
+        this.emitQ(event, state);
+    };
 
+    StatefulStoredEventProvider.prototype.emitQ = function (event, state) {
+        var doc = {
+            name: this.name,
+            event: event,
+            state: state,
+            date: new Date()
+        };
+        _super.prototype.emit.call(this, event, state);
+        return Q.ninvoke(this.collection, 'insert', doc);
+    };
+    return StatefulStoredEventProvider;
+})(StatefulEventProvider);
+exports.StatefulStoredEventProvider = StatefulStoredEventProvider;
+
+/*  Not Needed  */
+//export class StoredEventProvider<T> extends EventProvider<T> {
+//  private collection : mongodb.Collection;
+//
+//  constructor(name:string, collectionName : string, db : mongodb.Db) {
+//    super(name);
+//
+//    this.collection = db.collection(collectionName);
+//  }
+//
+//  public emit(event:T) {
+//    var doc = {
+//      name : this.name,
+//      event : event,
+//      date : new Date()
+//    };
+//    Q.ninvoke<void>(this.collection, 'insert', doc);  // save Event to db
+//    super.emit(event);
+//  }
+//}
+///////////////////////
+// Event Handler
 var EventHandler = (function (_super) {
     __extends(EventHandler, _super);
     function EventHandler(name, eventProvider, handlingLogic) {
@@ -83,48 +127,23 @@ var EventHandler = (function (_super) {
 })(EventProvider);
 exports.EventHandler = EventHandler;
 
-////////////////
-///// Event Store
-var StatefulStoredEventProvider = (function (_super) {
-    __extends(StatefulStoredEventProvider, _super);
-    function StatefulStoredEventProvider(name, collectionName, db) {
+// Handelt Events (HanldingLogic) und löst neue Events aus
+var StatefulEventHandler = (function (_super) {
+    __extends(StatefulEventHandler, _super);
+    function StatefulEventHandler(name, eventProvider, handlingLogic) {
+        var _this = this;
         _super.call(this, name);
 
-        this.collection = db.collection(collectionName);
+        // als handler für ein command registieren
+        eventProvider.handle(function (params, state) {
+            // was passieren soll, wenn das Event ausgelöst wurde
+            handlingLogic(params, state); // die Business Logik für das Event ausführen
+            _this.emit(params, state); // das Event an die hanlder (z.B. Projections) senden, die sich für das Event interessiern
+        });
     }
-    StatefulStoredEventProvider.prototype.emit = function (event, state) {
-        var doc = {
-            name: this.name,
-            event: event,
-            state: state,
-            date: new Date()
-        };
-        Q.ninvoke(this.collection, 'insert', doc); // save Event to db
-        _super.prototype.emit.call(this, event, state);
-    };
-    return StatefulStoredEventProvider;
+    return StatefulEventHandler;
 })(StatefulEventProvider);
-exports.StatefulStoredEventProvider = StatefulStoredEventProvider;
-
-var StoredEventProvider = (function (_super) {
-    __extends(StoredEventProvider, _super);
-    function StoredEventProvider(name, collectionName, db) {
-        _super.call(this, name);
-
-        this.collection = db.collection(collectionName);
-    }
-    StoredEventProvider.prototype.emit = function (event) {
-        var doc = {
-            name: this.name,
-            event: event,
-            date: new Date()
-        };
-        Q.ninvoke(this.collection, 'insert', doc); // save Event to db
-        _super.prototype.emit.call(this, event);
-    };
-    return StoredEventProvider;
-})(EventProvider);
-exports.StoredEventProvider = StoredEventProvider;
+exports.StatefulEventHandler = StatefulEventHandler;
 
 ///////////////////
 // Domain Events
@@ -165,22 +184,6 @@ var Aggregate = (function (_super) {
     return Aggregate;
 })(EventProvider);
 exports.Aggregate = Aggregate;
-
-var StoredAggregate = (function (_super) {
-    __extends(StoredAggregate, _super);
-    function StoredAggregate(name, collectionName, db, aggregator) {
-        _super.call(this, name, collectionName, db);
-
-        var self = this;
-        var emit = function (params) {
-            self.emit(params);
-        };
-
-        aggregator(emit);
-    }
-    return StoredAggregate;
-})(StoredEventProvider);
-exports.StoredAggregate = StoredAggregate;
 
 
 var MongoProjection = (function () {

@@ -7,3 +7,4 @@
 /// <reference path="express-validator/express-validator.d.ts" />
 /// <reference path="assert/assert.d.ts" />
 /// <reference path="joi/joi.d.ts" />
+/// <reference path="mocha/mocha.d.ts" />

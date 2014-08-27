@@ -1,6 +1,6 @@
 {
   "desc": "Nabada",
-  "extra" : "foo",
+  "extra" : "payload",
   "bookableItems": [
     {
       "name": "Wildes Nabada",

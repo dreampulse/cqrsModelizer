@@ -2,30 +2,36 @@
   <library name="Generated files" type="javaScript">
     <properties>
       <sourceFilesUrls>
-        <item url="file://$PROJECT_DIR$/example.js" />
-        <item url="file://$PROJECT_DIR$/src/cqrs5.js" />
-        <item url="file://$PROJECT_DIR$/RESTexample3.js" />
-        <item url="file://$PROJECT_DIR$/src/helpers.js" />
-        <item url="file://$PROJECT_DIR$/entities.js" />
-        <item url="file://$PROJECT_DIR$/RESTexample2.js" />
-        <item url="file://$PROJECT_DIR$/src/cqrs2.js" />
+        <item url="file://$PROJECT_DIR$/test/StatefulStoredEventProvider.spec.js" />
+        <item url="file://$PROJECT_DIR$/old/example.js" />
         <item url="file://$PROJECT_DIR$/src/cqrs.js" />
-        <item url="file://$PROJECT_DIR$/RESTexample4.js" />
-        <item url="file://$PROJECT_DIR$/pragmaticCqrs.js" />
-        <item url="file://$PROJECT_DIR$/RESTexample.js" />
-        <item url="file://$PROJECT_DIR$/RESTexample5.js" />
-        <item url="file://$PROJECT_DIR$/src/cqrs4.js" />
-        <item url="file://$PROJECT_DIR$/src/cqrs3.js" />
+        <item url="file://$PROJECT_DIR$/old/RESTexample3.js" />
+        <item url="file://$PROJECT_DIR$/src/helpers.js" />
+        <item url="file://$PROJECT_DIR$/example/entities.js" />
+        <item url="file://$PROJECT_DIR$/test/StatefulEventProvider.spec.js" />
+        <item url="file://$PROJECT_DIR$/old/RESTexample2.js" />
+        <item url="file://$PROJECT_DIR$/src/old/cqrs2.js" />
+        <item url="file://$PROJECT_DIR$/test/EventProvider.spec.js" />
+        <item url="file://$PROJECT_DIR$/src/old/cqrs.js" />
+        <item url="file://$PROJECT_DIR$/old/RESTexample4.js" />
+        <item url="file://$PROJECT_DIR$/old/pragmaticCqrs.js" />
+        <item url="file://$PROJECT_DIR$/old/RESTexample.js" />
+        <item url="file://$PROJECT_DIR$/example/RESTexample.js" />
+        <item url="file://$PROJECT_DIR$/src/old/cqrs4.js" />
+        <item url="file://$PROJECT_DIR$/src/old/cqrs3.js" />
       </sourceFilesUrls>
     </properties>
     <CLASSES>
       <root url="file://$PROJECT_DIR$/old/example.js" />
+      <root url="file://$PROJECT_DIR$/test/StatefulStoredEventProvider.spec.js" />
       <root url="file://$PROJECT_DIR$/src/cqrs.js" />
       <root url="file://$PROJECT_DIR$/old/RESTexample3.js" />
       <root url="file://$PROJECT_DIR$/example/entities.js" />
       <root url="file://$PROJECT_DIR$/src/helpers.js" />
+      <root url="file://$PROJECT_DIR$/test/StatefulEventProvider.spec.js" />
       <root url="file://$PROJECT_DIR$/old/RESTexample2.js" />
       <root url="file://$PROJECT_DIR$/src/old/cqrs2.js" />
+      <root url="file://$PROJECT_DIR$/test/EventProvider.spec.js" />
       <root url="file://$PROJECT_DIR$/src/old/cqrs.js" />
       <root url="file://$PROJECT_DIR$/old/RESTexample4.js" />
       <root url="file://$PROJECT_DIR$/old/pragmaticCqrs.js" />

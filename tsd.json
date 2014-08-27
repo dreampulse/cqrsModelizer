@@ -31,6 +31,9 @@
     },
     "joi/joi.d.ts": {
       "commit": "a90450655f562a62fc329378ce323321c80ad6f8"
+    },
+    "mocha/mocha.d.ts": {
+      "commit": "a90450655f562a62fc329378ce323321c80ad6f8"
     }
   }
 }
