@@ -1,0 +1,15 @@
+{
+  "desc": "Nabada",
+  "bookableItems": [
+    {
+      "name": "Wildes Nabada",
+      "price": 0,
+      "quantity": 20000
+    },
+    {
+      "name": "After Party",
+      "price": 8,
+      "quantity": 5000
+    }
+  ]
+}
