@@ -1,6 +1,10 @@
-cqrsModelizer
+CQRS Modelizer
 =============
 
-A CQRS implementation with TypeScript
+# Modelizer
+
+![Modelizer Logo](/img/modelizer.png)
+
+
 
 Take a look into the ```example.ts```-File
