@@ -6,10 +6,11 @@ import Joi = require('joi');
 import Q = require('q');
 Q.longStackSupport = true;
 
-import cqrs = require('./cqrs5');
+import cqrs = require('./cqrs');
 
 export interface DefaultDoc extends cqrs.ObjId {
   owner : mongodb.ObjectID;
+//_id (inherited)
 }
 
 export class MongoCURDProjection<T extends DefaultDoc, S extends cqrs.ObjId> {
@@ -57,24 +58,3 @@ export class MongoCURDProjection<T extends DefaultDoc, S extends cqrs.ObjId> {
     return this.projection.query(params);
   }
 }
-
-
-export interface BasicRequestWithSession extends express.Request {
-  session : {
-    user : any;
-  };
-}
-
-export var Resource = function<T>(app : express.Application, method : string, name : string, event : cqrs.DomainEvent<T, BasicRequestWithSession>, schema? : Joi.ObjectSchema) {
-
-  app[method]('/' + name, (req:BasicRequestWithSession, res:express.Response) => {
-
-    var params = <T>req.body;
-
-    if (schema) Joi.assert(params, schema);
-
-    event.emit(params, req.session.user);
-    res.json({ok:true});
-  });
-};
-

@@ -1,4 +1,4 @@
-/// <reference path="../typings/tsd.d.ts"/>
+/// <reference path="../../typings/tsd.d.ts"/>
 var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
@@ -10,24 +10,6 @@ Q.longStackSupport = true;
 
 ////////////////////////////
 // Events
-var StatefulEventProvider = (function () {
-    function StatefulEventProvider(name) {
-        this.name = name;
-        this.eventHandlers = {};
-    }
-    StatefulEventProvider.prototype.handle = function (eventHandler) {
-        this.eventHandlers[this.name] = eventHandler;
-    };
-
-    StatefulEventProvider.prototype.emit = function (event, state) {
-        for (var i in this.eventHandlers) {
-            this.eventHandlers[i](event, state);
-        }
-    };
-    return StatefulEventProvider;
-})();
-exports.StatefulEventProvider = StatefulEventProvider;
-
 var EventProvider = (function () {
     function EventProvider(name) {
         this.name = name;
@@ -49,23 +31,6 @@ exports.EventProvider = EventProvider;
 ///////////////////////
 // Event Handler
 // Handelt Events (HanldingLogic) und löst neue Events aus
-var StatefulEventHandler = (function (_super) {
-    __extends(StatefulEventHandler, _super);
-    function StatefulEventHandler(name, eventProvider, handlingLogic) {
-        var _this = this;
-        _super.call(this, name);
-
-        // als handler für ein command registieren
-        eventProvider.handle(function (params, state) {
-            // was passieren soll, wenn das Event ausgelöst wurde
-            handlingLogic(params, state); // die Business Logik für das Event ausführen
-            _this.emit(params, state); // das Event an die hanlder (z.B. Projections) senden, die sich für das Event interessiern
-        });
-    }
-    return StatefulEventHandler;
-})(StatefulEventProvider);
-exports.StatefulEventHandler = StatefulEventHandler;
-
 var EventHandler = (function (_super) {
     __extends(EventHandler, _super);
     function EventHandler(name, eventProvider, handlingLogic) {
@@ -85,27 +50,6 @@ exports.EventHandler = EventHandler;
 
 ////////////////
 ///// Event Store
-var StatefulStoredEventProvider = (function (_super) {
-    __extends(StatefulStoredEventProvider, _super);
-    function StatefulStoredEventProvider(name, collectionName, db) {
-        _super.call(this, name);
-
-        this.collection = db.collection(collectionName);
-    }
-    StatefulStoredEventProvider.prototype.emit = function (event, state) {
-        var doc = {
-            name: this.name,
-            event: event,
-            state: state,
-            date: new Date()
-        };
-        Q.ninvoke(this.collection, 'insert', doc); // save Event to db
-        _super.prototype.emit.call(this, event, state);
-    };
-    return StatefulStoredEventProvider;
-})(StatefulEventProvider);
-exports.StatefulStoredEventProvider = StatefulStoredEventProvider;
-
 var StoredEventProvider = (function (_super) {
     __extends(StoredEventProvider, _super);
     function StoredEventProvider(name, collectionName, db) {
@@ -128,28 +72,30 @@ exports.StoredEventProvider = StoredEventProvider;
 
 ///////////////////
 // Domain Events
-/// Domain Events are stored
 var DomainEvent = (function (_super) {
     __extends(DomainEvent, _super);
     function DomainEvent(name, collectionName, db) {
         _super.call(this, name, collectionName, db);
     }
     return DomainEvent;
-})(StatefulStoredEventProvider);
+})(StoredEventProvider);
 exports.DomainEvent = DomainEvent;
 
-/// Command aren't stored
+////////////////
+///// Commands
+// Ein Command mit Parametern T
+// Ist eine Implementierung für den Server
+// verwendet express (später soll das dynamisch ein communicator channel verwenden
 var Command = (function (_super) {
     __extends(Command, _super);
     function Command(name) {
         _super.call(this, name);
     }
     return Command;
-})(StatefulEventProvider);
+})(EventProvider);
 exports.Command = Command;
 
-////////////////////
-// Aggregation
+// todo verhalten von der projection hier implementieren
 var Aggregate = (function (_super) {
     __extends(Aggregate, _super);
     function Aggregate(name, aggregator) {
@@ -165,22 +111,6 @@ var Aggregate = (function (_super) {
     return Aggregate;
 })(EventProvider);
 exports.Aggregate = Aggregate;
-
-var StoredAggregate = (function (_super) {
-    __extends(StoredAggregate, _super);
-    function StoredAggregate(name, collectionName, db, aggregator) {
-        _super.call(this, name, collectionName, db);
-
-        var self = this;
-        var emit = function (params) {
-            self.emit(params);
-        };
-
-        aggregator(emit);
-    }
-    return StoredAggregate;
-})(StoredEventProvider);
-exports.StoredAggregate = StoredAggregate;
 
 
 var MongoProjection = (function () {
@@ -202,11 +132,11 @@ var MongoProjection = (function () {
                 return Q.ninvoke(self.collection, 'insert', params);
             },
             update: function (query, params) {
-                //        delete params._id;  // assure _id is created by the database
+                delete params._id; // assure _id is created by the database
                 return Q.ninvoke(self.collection, 'update', query, params);
             },
-            remove: function (query) {
-                return Q.ninvoke(self.collection, 'remove', query);
+            remove: function (id) {
+                return Q.ninvoke(self.collection, 'remove', { _id: id });
             }
         };
 
@@ -228,7 +158,14 @@ var Context = (function () {
         this.name = name;
         this.db = db;
     }
+    Context.prototype.createCommand = function (cmdName) {
+        return new StoredEventProvider(cmdName, this.name + 'Events', this.db);
+    };
+
+    Context.prototype.domainEvent = function (name) {
+        return new DomainEvent(name, this.name, this.db);
+    };
     return Context;
 })();
 exports.Context = Context;
-//# sourceMappingURL=cqrs.js.map
+//# sourceMappingURL=cqrs3.js.map

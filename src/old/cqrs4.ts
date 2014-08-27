@@ -1,4 +1,4 @@
-/// <reference path="../typings/tsd.d.ts"/>
+/// <reference path="../../typings/tsd.d.ts"/>
 
 import mongodb = require('mongodb');
 import express = require('express');
@@ -9,7 +9,7 @@ Q.longStackSupport = true;
 ////////////////////////////
 // Events
 
-export class StatefulEventProvider<T,S> {
+export class EventProvider<T,S> {
 
   constructor(public name : string) {}
 
@@ -27,32 +27,13 @@ export class StatefulEventProvider<T,S> {
 }
 
 
-export class EventProvider<T> {
-
-  constructor(public name : string) {}
-
-  eventHandlers : { [name:string] : (event:T) => void } = {};
-
-  public handle(eventHandler : (event:T) => void) {
-    this.eventHandlers[this.name] = eventHandler;
-  }
-
-  public emit(event:T) {
-    for (var i in this.eventHandlers) {
-      this.eventHandlers[i](event);
-    }
-  }
-}
-
-
-
 ///////////////////////
 // Event Handler
 
 // Handelt Events (HanldingLogic) und löst neue Events aus
-export class StatefulEventHandler<T,S> extends StatefulEventProvider<T,S> {
+export class EventHandler<T,S> extends EventProvider<T,S> {
 
-  constructor(name:string, eventProvider:StatefulEventProvider<T,S>, handlingLogic:(params:T, state:S) => void) {
+  constructor(name:string, eventProvider:EventProvider<T,S>, handlingLogic:(params:T, state:S) => void) {
     super(name);
 
     // als handler für ein command registieren
@@ -67,26 +48,9 @@ export class StatefulEventHandler<T,S> extends StatefulEventProvider<T,S> {
 
 }
 
-export class EventHandler<T> extends EventProvider<T> {
-
-  constructor(name:string, eventProvider:EventProvider<T>, handlingLogic:(params:T) => void) {
-    super(name);
-
-    // als handler für ein command registieren
-    eventProvider.handle((params:T) => {
-      // was passieren soll, wenn das Event ausgelöst wurde
-
-      handlingLogic(params);  // die Business Logik für das Event ausführen
-      this.emit(params); // das Event an die hanlder (z.B. Projections) senden, die sich für das Event interessiern
-
-    });
-  }
-
-}
-
 ////////////////
 ///// Event Store
-export class StatefulStoredEventProvider<T,S> extends StatefulEventProvider<T,S> {
+export class StoredEventProvider<T,S> extends EventProvider<T,S> {
   private collection : mongodb.Collection;
 
   constructor(name:string, collectionName : string, db : mongodb.Db) {
@@ -107,79 +71,33 @@ export class StatefulStoredEventProvider<T,S> extends StatefulEventProvider<T,S>
   }
 }
 
-export class StoredEventProvider<T> extends EventProvider<T> {
-  private collection : mongodb.Collection;
-
-  constructor(name:string, collectionName : string, db : mongodb.Db) {
-    super(name);
-
-    this.collection = db.collection(collectionName);
-  }
-
-  public emit(event:T) {
-    var doc = {
-      name : this.name,
-      event : event,
-      date : new Date()
-    };
-    Q.ninvoke<void>(this.collection, 'insert', doc);  // save Event to db
-    super.emit(event);
-  }
-}
-
 
 ///////////////////
 // Domain Events
-
-/// Domain Events are stored
-export class DomainEvent<T,S> extends StatefulStoredEventProvider<T,S> {
+export class DomainEvent<T,S> extends StoredEventProvider<T,S> {
 
   constructor(name:string, collectionName : string, db : mongodb.Db) {
     super(name, collectionName, db);
   }
 }
 
-/// Command aren't stored
-export class Command<T,S> extends StatefulEventProvider<T,S> {
 
-  constructor(name:string) {
-    super(name);
-  }
-}
+//// todo verhalten von der projection hier implementieren
+//export class Aggregate<T> extends StatefulEventProvider<T> {
+//
+//  constructor(name:string, aggregator : (emit : (params:T) => void) => void) {
+//    super(name);
+//
+//    var self = this;
+//    var emit = function(params : T) : void {
+//      self.emit(params);
+//    };
+//
+//    aggregator(emit);
+//  }
+//
+//}
 
-////////////////////
-// Aggregation
-
-export class Aggregate<T> extends EventProvider<T> {
-
-  constructor(name:string, aggregator : (emit : (params:T) => void) => void) {
-    super(name);
-
-    var self = this;
-    var emit = function(params : T) : void {
-      self.emit(params);
-    };
-
-    aggregator(emit);
-  }
-
-}
-
-
-export class StoredAggregate<T> extends StoredEventProvider<T> {
-
-  constructor(name:string, collectionName : string, db : mongodb.Db, aggregator : (emit : (params:T) => void) => void) {
-    super(name, collectionName, db);
-
-    var self = this;
-    var emit = function(params : T) : void {
-      self.emit(params);
-    };
-
-    aggregator(emit);
-  }
-
-}
 
 /////////////////////
 // Projections
@@ -212,11 +130,11 @@ export class MongoProjection<T extends ObjId> {
         return Q.ninvoke<void>(self.collection, 'insert', params);
       },
       update : function(query:any, params:T) {
-//        delete params._id;  // assure _id is created by the database
+        delete params._id;  // assure _id is created by the database
         return Q.ninvoke<void>(self.collection, 'update', query, params);
       },
-      remove : function(query : any) {
-        return Q.ninvoke<void>(self.collection, 'remove', query);
+      remove : function(id : mongodb.ObjectID) {
+        return Q.ninvoke<void>(self.collection, 'remove', {_id : id});
       }
     };
 

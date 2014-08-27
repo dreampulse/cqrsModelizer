@@ -1,4 +1,4 @@
-/// <reference path="../typings/tsd.d.ts"/>
+/// <reference path="../../typings/tsd.d.ts"/>
 
 import mongodb = require('mongodb');
 import express = require('express');
@@ -8,24 +8,6 @@ Q.longStackSupport = true;
 
 ////////////////////////////
 // Events
-
-export class StatefulEventProvider<T,S> {
-
-  constructor(public name : string) {}
-
-  eventHandlers : { [name:string] : (event:T, state:S) => void } = {};
-
-  public handle(eventHandler : (event:T, state:S) => void) {
-    this.eventHandlers[this.name] = eventHandler;
-  }
-
-  public emit(event:T, state:S) {
-    for (var i in this.eventHandlers) {
-      this.eventHandlers[i](event, state);
-    }
-  }
-}
-
 
 export class EventProvider<T> {
 
@@ -45,28 +27,10 @@ export class EventProvider<T> {
 }
 
 
-
 ///////////////////////
 // Event Handler
 
 // Handelt Events (HanldingLogic) und löst neue Events aus
-export class StatefulEventHandler<T,S> extends StatefulEventProvider<T,S> {
-
-  constructor(name:string, eventProvider:StatefulEventProvider<T,S>, handlingLogic:(params:T, state:S) => void) {
-    super(name);
-
-    // als handler für ein command registieren
-    eventProvider.handle((params:T, state:S) => {
-      // was passieren soll, wenn das Event ausgelöst wurde
-
-      handlingLogic(params, state);  // die Business Logik für das Event ausführen
-      this.emit(params, state); // das Event an die hanlder (z.B. Projections) senden, die sich für das Event interessiern
-
-    });
-  }
-
-}
-
 export class EventHandler<T> extends EventProvider<T> {
 
   constructor(name:string, eventProvider:EventProvider<T>, handlingLogic:(params:T) => void) {
@@ -84,29 +48,9 @@ export class EventHandler<T> extends EventProvider<T> {
 
 }
 
+
 ////////////////
 ///// Event Store
-export class StatefulStoredEventProvider<T,S> extends StatefulEventProvider<T,S> {
-  private collection : mongodb.Collection;
-
-  constructor(name:string, collectionName : string, db : mongodb.Db) {
-    super(name);
-
-    this.collection = db.collection(collectionName);
-  }
-
-  public emit(event:T, state:S) {
-    var doc = {
-      name : this.name,
-      event : event,
-      state : state,
-      date : new Date()
-    };
-    Q.ninvoke<void>(this.collection, 'insert', doc);  // save Event to db
-    super.emit(event, state);
-  }
-}
-
 export class StoredEventProvider<T> extends EventProvider<T> {
   private collection : mongodb.Collection;
 
@@ -130,26 +74,28 @@ export class StoredEventProvider<T> extends EventProvider<T> {
 
 ///////////////////
 // Domain Events
-
-/// Domain Events are stored
-export class DomainEvent<T,S> extends StatefulStoredEventProvider<T,S> {
+export class DomainEvent<T> extends StoredEventProvider<T> {
 
   constructor(name:string, collectionName : string, db : mongodb.Db) {
     super(name, collectionName, db);
   }
 }
 
-/// Command aren't stored
-export class Command<T,S> extends StatefulEventProvider<T,S> {
+
+////////////////
+///// Commands
+
+// Ein Command mit Parametern T
+// Ist eine Implementierung für den Server
+// verwendet express (später soll das dynamisch ein communicator channel verwenden
+export class Command<T> extends EventProvider<T> {
 
   constructor(name:string) {
     super(name);
   }
 }
 
-////////////////////
-// Aggregation
-
+// todo verhalten von der projection hier implementieren
 export class Aggregate<T> extends EventProvider<T> {
 
   constructor(name:string, aggregator : (emit : (params:T) => void) => void) {
@@ -165,21 +111,6 @@ export class Aggregate<T> extends EventProvider<T> {
 
 }
 
-
-export class StoredAggregate<T> extends StoredEventProvider<T> {
-
-  constructor(name:string, collectionName : string, db : mongodb.Db, aggregator : (emit : (params:T) => void) => void) {
-    super(name, collectionName, db);
-
-    var self = this;
-    var emit = function(params : T) : void {
-      self.emit(params);
-    };
-
-    aggregator(emit);
-  }
-
-}
 
 /////////////////////
 // Projections
@@ -212,11 +143,11 @@ export class MongoProjection<T extends ObjId> {
         return Q.ninvoke<void>(self.collection, 'insert', params);
       },
       update : function(query:any, params:T) {
-//        delete params._id;  // assure _id is created by the database
+        delete params._id;  // assure _id is created by the database
         return Q.ninvoke<void>(self.collection, 'update', query, params);
       },
-      remove : function(query : any) {
-        return Q.ninvoke<void>(self.collection, 'remove', query);
+      remove : function(id : mongodb.ObjectID) {
+        return Q.ninvoke<void>(self.collection, 'remove', {_id : id});
       }
     };
 
@@ -240,13 +171,13 @@ export class MongoProjection<T extends ObjId> {
 export class Context {
   constructor(public name : string, public db : mongodb.Db) {}
 
-//  createCommand<T>(cmdName : string) : StoredEventProvider<T> {
-//    return new StoredEventProvider<T>(cmdName, this.name + 'Events', this.db);
-//  }
-//
-//  domainEvent<T>(name:string) : DomainEvent<T> {
-//    return new DomainEvent<T>(name, this.name, this.db);
-//  }
+  createCommand<T>(cmdName : string) : StoredEventProvider<T> {
+    return new StoredEventProvider<T>(cmdName, this.name + 'Events', this.db);
+  }
+
+  domainEvent<T>(name:string) : DomainEvent<T> {
+    return new DomainEvent<T>(name, this.name, this.db);
+  }
 
 }
 
